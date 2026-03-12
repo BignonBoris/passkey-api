@@ -1,4 +1,4 @@
-const express = require('express');
+import { Router } from "express";
 import {
   updateToken,
   updateProfile,
@@ -16,7 +16,7 @@ import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 import { userProfileUpload } from "../../middlewares/upload.middleware";
 
-const router = express.Router();
+const router = Router();
 
 router.get("/", getUsers);
 router.get("/me", authenticate, getMyProfile);
@@ -242,4 +242,4 @@ router.delete("/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteUser);
  *         description: Unauthorized
  */
 
-module.exports = router;
+export default router;

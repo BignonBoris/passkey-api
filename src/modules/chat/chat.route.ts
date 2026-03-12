@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import { authenticate } from "../../middlewares/auth.middleware";
 import {
   getConversationMessages,
@@ -8,7 +8,7 @@ import {
   sendMessage,
 } from "./chat.controller";
 
-const router = express.Router();
+const router = Router();
 
 router.use(authenticate);
 
@@ -18,4 +18,4 @@ router.patch("/conversations/:conversationId/read", readConversation);
 router.get("/conversations/with/:otherUserId", openConversationWithUser);
 router.post("/messages", sendMessage);
 
-module.exports = router;
+export default router;

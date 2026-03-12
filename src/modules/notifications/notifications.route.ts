@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listNotificationLogs,
   getNotificationLog,
@@ -9,7 +9,7 @@ import {
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -51,4 +51,4 @@ router.get("/:id", authenticate, authorize(PRIVILEGED_ROLES), getNotificationLog
 router.patch("/:id", authenticate, authorize(PRIVILEGED_ROLES), updateNotificationLog);
 router.delete("/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteNotificationLog);
 
-module.exports = router;
+export default router;

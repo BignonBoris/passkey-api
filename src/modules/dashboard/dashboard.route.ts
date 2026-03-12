@@ -1,7 +1,7 @@
-const express = require("express");
+import { Router } from "express";
 import { getDashboardOverview, getDashboardTrends } from "./dashboard.controller";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -59,4 +59,4 @@ router.get("/", getDashboardOverview);
  *                             type: number
  */
 router.get("/trends", getDashboardTrends);
-module.exports = router;
+export default router;

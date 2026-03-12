@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listDriverDocuments,
   getDriverDocument,
@@ -14,7 +14,7 @@ import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 import { driverDocsUpload } from "../../middlewares/upload.middleware";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -84,4 +84,4 @@ router.get("/:id", authenticate, authorize(PRIVILEGED_ROLES), getDriverDocument)
 router.patch("/:id", authenticate, authorize(PRIVILEGED_ROLES), updateDriverDocument);
 router.delete("/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteDriverDocument);
 
-module.exports = router;
+export default router;

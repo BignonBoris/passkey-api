@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listSupportTickets,
   getSupportTicket,
@@ -10,7 +10,7 @@ import {
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -53,4 +53,4 @@ router.patch("/tickets/:id", authenticate, authorize(PRIVILEGED_ROLES), updateSu
 router.delete("/tickets/:id", authenticate, deleteSupportTicket);
 router.post("/tickets/:id/messages", authenticate, postSupportTicketMessage);
 
-module.exports = router;
+export default router;

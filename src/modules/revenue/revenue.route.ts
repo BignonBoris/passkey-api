@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listRevenueConfigs,
   getRevenueConfig,
@@ -10,7 +10,7 @@ import {
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
-const router = express.Router();
+const router = Router();
 
 router.get("/configs", authenticate, authorize(PRIVILEGED_ROLES), listRevenueConfigs);
 router.get("/configs/:id", authenticate, authorize(PRIVILEGED_ROLES), getRevenueConfig);
@@ -19,4 +19,4 @@ router.patch("/configs/:id", authenticate, authorize(PRIVILEGED_ROLES), updateRe
 router.delete("/configs/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteRevenueConfig);
 router.post("/calculate", authenticate, authorize(PRIVILEGED_ROLES), calculateRevenue);
 
-module.exports = router;
+export default router;

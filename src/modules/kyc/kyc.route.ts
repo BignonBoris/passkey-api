@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listKycRequests,
   getKycRequest,
@@ -9,7 +9,7 @@ import {
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger
@@ -88,4 +88,4 @@ router.get("/:id", authenticate, authorize(PRIVILEGED_ROLES), getKycRequest);
 router.patch("/:id", authenticate, authorize(PRIVILEGED_ROLES), updateKycRequest);
 router.delete("/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteKycRequest);
 
-module.exports = router;
+export default router;

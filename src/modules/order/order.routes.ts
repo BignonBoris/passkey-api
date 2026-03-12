@@ -15,11 +15,12 @@ import {
   updateDeliveryStatus,
   updateDriverLocationForDelivery,
   updateOrderStatus
-} from './order.controller';
+} from "./order.controller";
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
-const express = require('express');
-const router = express.Router();
+import { Router } from "express";
+
+const router = Router();
 
 
 // Quand on appelle POST sur / (la racine de ce groupe), on lance createOrder
@@ -186,4 +187,4 @@ router.get('/deliveries/:orderId/tracking', getDeliveryTracking);
  * tags:
  *   name: Order
  */
-module.exports = router;
+export default router;

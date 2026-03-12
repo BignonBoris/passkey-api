@@ -1,4 +1,4 @@
-const express = require("express");
+import { Router } from "express";
 import {
   listDriverVehicles,
   getDriverVehicle,
@@ -10,7 +10,7 @@ import {
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
-const router = express.Router();
+const router = Router();
 
 router.get("/", authenticate, authorize(PRIVILEGED_ROLES), listDriverVehicles);
 router.post("/", authenticate, authorize(PRIVILEGED_ROLES), createDriverVehicle);
@@ -19,4 +19,4 @@ router.patch("/:id", authenticate, authorize(PRIVILEGED_ROLES), updateDriverVehi
 router.delete("/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteDriverVehicle);
 router.patch("/:id/activate", authenticate, authorize(PRIVILEGED_ROLES), activateDriverVehicle);
 
-module.exports = router;
+export default router;
