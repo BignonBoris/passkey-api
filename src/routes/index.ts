@@ -19,6 +19,7 @@ const faqsRoutes = require("../modules/faqs/faqs.route");
 const chatRoutes = require("../modules/chat/chat.route");
 const settingsRoutes = require("../modules/settings/settings.route");
 const addressesRoutes = require("../modules/addresses/addresses.route");
+const devRoutes = require("../modules/dev/reset.route");
 const paymentsRoutes = require("../modules/payments/payments.route");
 
 const router = Router();
@@ -44,6 +45,7 @@ router.use("/faqs", faqsRoutes);
 router.use("/chat", chatRoutes);
 router.use("/settings", settingsRoutes);
 router.use("/addresses", addressesRoutes);
+router.use("/dev", devRoutes);
 router.use("/payments", paymentsRoutes);
 
 export default router;

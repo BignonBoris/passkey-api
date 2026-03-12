@@ -469,6 +469,14 @@ export const swaggerSpec = swaggerJSDoc({
             polygon: { type: "object", nullable: true },
           },
         },
+        DevResetResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            message: { type: "string", example: "Database reset completed; all tables recreated." },
+            error: { type: "string", nullable: true },
+          },
+        },
       },
     },
     paths: {
@@ -639,6 +647,33 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
       },
+      "/dev/reset-database": {
+        post: {
+          tags: ["Dev"],
+          summary: "Force rebuilds the database schema",
+          description:
+            "Drops and recreates every table. This is destructive and intended for development/test environments only.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "Database reset completed",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/DevResetResponse" },
+                },
+              },
+            },
+            500: {
+              description: "Reset failed",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/DevResetResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
     },
 
     tags: [
@@ -656,6 +691,7 @@ export const swaggerSpec = swaggerJSDoc({
       { name: "Notifications", description: "Notification logs" },
       { name: "Incidents", description: "Operational incidents" },
       { name: "Zones", description: "Service zones" },
+      { name: "Dev", description: "Development tooling and helpers" },
     ],
   },
   apis: ["src/modules/**/*.routes.ts", "src/modules/**/*.route.ts"],

@@ -1,12 +1,26 @@
 import * as admin from 'firebase-admin';
 
-const serviceAccount = require('../../firebase-service-account.json');
+const firebaseConfig = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+if (!firebaseConfig) {
+  throw new Error("FIREBASE_SERVICE_ACCOUNT is not defined");
+}
+
+const serviceAccount = JSON.parse(firebaseConfig);
 
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
 }
+
+// const serviceAccount = require('../../firebase-service-account.json');
+
+// if (!admin.apps.length) {
+//   admin.initializeApp({
+//     credential: admin.credential.cert(serviceAccount),
+//   });
+// }
 
 function normalizeToken(token: string | null | undefined): string {
   return (token ?? '').toString().trim();
