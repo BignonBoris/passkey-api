@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import DriverRevenueConfig from "@/models/driver-revenue-config.model";
-import { calculateDriverRevenue, RevenueCalculationInput } from "@/services/revenue.service";
+import DriverRevenueConfig from "../../models/driver-revenue-config.model";
+import { calculateDriverRevenue, RevenueCalculationInput } from "../../services/revenue.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);
@@ -148,8 +148,8 @@ export async function calculateRevenue(req: Request, res: Response) {
     const revenueConfig = configId
       ? await DriverRevenueConfig.findByPk(configId)
       : await DriverRevenueConfig.findOne({
-          where: vehicleType ? { vehicleType } : undefined,
-        });
+        where: vehicleType ? { vehicleType } : undefined,
+      });
 
     if (!revenueConfig) {
       return res.status(404).json({ success: false, message: "Revenue config not found" });
