@@ -16,6 +16,9 @@ app.use(cors());
 app.use(helmet());
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+app.get("/healthz", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {

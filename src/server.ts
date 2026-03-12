@@ -38,10 +38,11 @@ async function startServer() {
     await ensureDefaultAppSettings();
     await seedDefaultAdmin();
     server.listen(PORT, () => {
-      console.log(`API running on http://localhost:${PORT}`);
+      console.log(`API running on port ${PORT}`);
     });
   } catch (error) {
     console.error("Database sync failed:", error);
+    process.exit(1);
   }
 }
 

@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "render-build": "npm ci && npm run build"
   },
   "type": "commonjs",
   "dependencies": {
-    "-": "^0.0.1",
     "@prisma/adapter-mariadb": "^7.3.0",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.4.0",
@@ -27,7 +27,6 @@
     "mysql2": "^3.17.1",
     "pg": "^8.18.0",
     "prisma": "^7.3.0",
-    "save-dev": "^0.0.1-security",
     "sequelize": "^6.37.7",
     "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",

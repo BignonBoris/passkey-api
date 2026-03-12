@@ -1,8 +1,7 @@
-.node_modules/
-.package-lock.json
-.package.json
-.package-lock.json
-/src/generated/prisma
-./dist
-./api/uploads/
+node_modules/
+dist/
+uploads/
+src/generated/prisma/
 .env
+.env.local
+.env.*.local
