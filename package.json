@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
-    "start": "node dist/src/server.js",
+    "start": "node -r tsconfig-paths/register dist/src/server.js",
     "render-build": "npm ci && npm run build"
   },
   "type": "commonjs",
