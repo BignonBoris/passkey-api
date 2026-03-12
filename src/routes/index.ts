@@ -1,5 +1,6 @@
 import { Router } from "express";
-import authRoutes from "../modules/auth/auth.route";
+// import authRoutes from "../modules/auth/auth.route";
+const authRoutes = require('../modules/auth/auth.route');
 const mapsRoutes = require('../modules/maps/maps.route');
 const ordersRoutes = require('../modules/order/order.routes');
 const usersRoutes = require('../modules/users/user.route');
