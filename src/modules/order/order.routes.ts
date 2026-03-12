@@ -8,6 +8,10 @@ import {
   deleteOrder,
   getDeliveryTracking,
   getOrders,
+  driverArrivedPickup,
+  driverLeftPickup,
+  cancelDelivery,
+  estimateCancellation,
   updateDeliveryStatus,
   updateDriverLocationForDelivery,
   updateOrderStatus
@@ -28,6 +32,10 @@ router.post('/bulk-delete', authenticate, authorize(PRIVILEGED_ROLES), bulkDelet
 router.post('/deliveries', createDeliveryRequest);
 router.post('/deliveries/:orderId/assign-nearest', assignNearestDriver);
 router.post('/deliveries/:orderId/accept', acceptDeliveryByDriver);
+router.post('/deliveries/:orderId/driver-arrived-pickup', driverArrivedPickup);
+router.post('/deliveries/:orderId/driver-left-pickup', driverLeftPickup);
+router.post('/deliveries/:orderId/cancel', cancelDelivery);
+router.get('/deliveries/:orderId/cancellation-estimate', estimateCancellation);
 router.patch('/deliveries/:orderId/status', updateDeliveryStatus);
 router.patch('/deliveries/:orderId/driver-location', updateDriverLocationForDelivery);
 router.get('/deliveries/:orderId/tracking', getDeliveryTracking);

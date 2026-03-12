@@ -45,21 +45,21 @@ function mapTicketForResponse(ticket: any) {
   const archived = isArchivedCategory(rawCategory);
   const messages = Array.isArray(ticket.messages)
     ? ticket.messages.map((msg: any) => ({
-        id: msg.id,
-        ticketId: msg.ticketId,
-        senderId: msg.senderId,
-        senderRole: msg.senderRole,
-        message: msg.message,
-        createdAt: msg.createdAt,
-        sender: msg.sender
-          ? {
-              id: msg.sender.id,
-              name: msg.sender.name,
-              phone: msg.sender.phone,
-              role: msg.sender.role,
-            }
-          : null,
-      }))
+      id: msg.id,
+      ticketId: msg.ticketId,
+      senderId: msg.senderId,
+      senderRole: msg.senderRole,
+      message: msg.message,
+      createdAt: msg.createdAt,
+      sender: msg.sender
+        ? {
+          id: msg.sender.id,
+          name: msg.sender.name,
+          phone: msg.sender.phone,
+          role: msg.sender.role,
+        }
+        : null,
+    }))
     : [];
 
   return {
@@ -77,19 +77,19 @@ function mapTicketForResponse(ticket: any) {
     lastMessageAt: ticket.lastMessageAt,
     requester: user
       ? {
-          id: user.id,
-          name: user.name,
-          phone: user.phone,
-          role: user.role,
-        }
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+      }
       : null,
     assignedAdmin: assignedAdmin
       ? {
-          id: assignedAdmin.id,
-          name: assignedAdmin.name,
-          phone: assignedAdmin.phone,
-          role: assignedAdmin.role,
-        }
+        id: assignedAdmin.id,
+        name: assignedAdmin.name,
+        phone: assignedAdmin.phone,
+        role: assignedAdmin.role,
+      }
       : null,
     messages,
   };
@@ -372,11 +372,11 @@ export async function postSupportTicketMessage(req: AuthenticatedRequest, res: R
         createdAt: created?.get("createdAt"),
         sender: (created as any)?.sender
           ? {
-              id: (created as any).sender.id,
-              name: (created as any).sender.name,
-              phone: (created as any).sender.phone,
-              role: (created as any).sender.role,
-            }
+            id: (created as any).sender.id,
+            name: (created as any).sender.name,
+            phone: (created as any).sender.phone,
+            role: (created as any).sender.role,
+          }
           : null,
       },
     });

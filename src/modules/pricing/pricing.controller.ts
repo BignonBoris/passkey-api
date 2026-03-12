@@ -1,5 +1,13 @@
 import { Request, Response } from "express";
 import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
+import { calculateDeliveryPricing } from "../../services/pricing.service";
+import {
+  listPricingRules,
+  upsertPricingRule,
+  removePricingRule,
+  PricingRulePayload,
+} from "../../services/config.service";
+import PricingRule from "../../models/pricing-rule.model";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);
@@ -98,7 +106,7 @@ export async function deletePricingConfig(req: Request, res: Response) {
 
 export async function calculatePricing(req: Request, res: Response) {
   try {
-    const { vehicleType, configId, distanceKm, durationMinutes, extras } = req.body || {};
+    const { vehicleType, configId, distanceKm, durationMinutes, extras, pickupTimestamp } = req.body || {};
     const distance = parseNumber(distanceKm, 0);
     const duration = parseNumber(durationMinutes, 0);
     const extrasAmount = parseNumber(extras, 0);
@@ -107,33 +115,65 @@ export async function calculatePricing(req: Request, res: Response) {
       return res.status(400).json({ success: false, message: "vehicleType or configId is required" });
     }
 
-    const config = configId
-      ? await VehiclePricingConfig.findByPk(configId)
-      : await VehiclePricingConfig.findOne({ where: { vehicleType } });
-
-    if (!config) return res.status(404).json({ success: false, message: "Pricing config not found" });
-
-    const distanceComponent = config.perKmRate * distance;
-    const timeComponent = config.perMinuteRate * duration;
-    const rawTotal = config.baseFare + config.bookingFee + distanceComponent + timeComponent + extrasAmount;
-    const total = Math.max(rawTotal, config.minimumFare);
+    const calculation = await calculateDeliveryPricing({
+      vehicleType: vehicleType || "",
+      distanceKm: distance,
+      durationMinutes: duration,
+      extras: extrasAmount,
+      pickupTimestamp,
+    });
 
     return res.status(200).json({
       success: true,
       data: {
-        config,
-        calculation: {
-          total: Number(total.toFixed(2)),
-          baseFare: Number(config.baseFare.toFixed(2)),
-          bookingFee: Number(config.bookingFee.toFixed(2)),
-          distanceComponent: Number(distanceComponent.toFixed(2)),
-          timeComponent: Number(timeComponent.toFixed(2)),
-          extras: Number(extrasAmount.toFixed(2)),
-          minimumFareApplied: total === config.minimumFare && rawTotal < config.minimumFare,
-        },
+        config: calculation,
+        calculation,
       },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to calculate pricing" });
+  }
+}
+
+export async function listPricingRulesController(req: Request, res: Response) {
+  try {
+    const rawType = req.query.type;
+    const type = typeof rawType === "string" ? rawType : undefined;
+    const rows = await listPricingRules(type as any);
+    return res.status(200).json({ success: true, data: rows });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to list pricing rules" });
+  }
+}
+
+export async function createPricingRuleController(req: Request, res: Response) {
+  try {
+    const payload = req.body as PricingRulePayload;
+    const row = await upsertPricingRule(payload);
+    return res.status(201).json({ success: true, data: row });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to save pricing rule" });
+  }
+}
+
+export async function updatePricingRuleController(req: Request, res: Response) {
+  try {
+    const payload = req.body as PricingRulePayload;
+    const row = await upsertPricingRule({ ...payload, id: req.params.id });
+    return res.status(200).json({ success: true, data: row });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to update pricing rule" });
+  }
+}
+
+export async function deletePricingRuleController(req: Request, res: Response) {
+  try {
+    const row = await removePricingRule(req.params.id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Pricing rule not found" });
+    }
+    return res.status(200).json({ success: true, data: row });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to delete pricing rule" });
   }
 }

@@ -53,12 +53,12 @@ export class UserRepository {
     });
   }
 
-  
- static async updateUser(user: User) {
-  const { id, ...updateData } = user;
-  return await User.update(updateData, {
-    where: { id: id }
-  });
-}
+
+  static async updateUser(user: User) {
+    const { id, ...updateData } = user;
+    return await User.update(updateData, {
+      where: { id: id }
+    });
+  }
 
 }

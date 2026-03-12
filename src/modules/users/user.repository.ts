@@ -12,31 +12,31 @@ export class UserRepository {
   }
   static async updateFcmToken(userId: string, token: string) {
     return await User.update(
-      { fcmToken: token }, 
+      { fcmToken: token },
       { where: { id: userId } }
     );
   }
-  
+
   static async updateUser(userData: Partial<User>) {
-  const { id, ...updateData } = userData;
+    const { id, ...updateData } = userData;
 
-  if (!id) {
-    throw new Error("L'ID de l'utilisateur est requis pour la mise à jour.");
+    if (!id) {
+      throw new Error("L'ID de l'utilisateur est requis pour la mise à jour.");
+    }
+
+    // 1. Exécuter la mise à jour
+    // Renvoie [nombre_de_lignes_affectées]
+    const [affectedCount] = await User.update(updateData, {
+      where: { id: id }
+    });
+
+    if (affectedCount === 0) {
+      return null; // Ou gérer l'erreur si l'utilisateur n'existe pas
+    }
+
+    // 2. Récupérer et retourner l'objet mis à jour 
+    return await User.findByPk(id, { raw: true });
   }
-
-  // 1. Exécuter la mise à jour
-  // Renvoie [nombre_de_lignes_affectées]
-  const [affectedCount] = await User.update(updateData, {
-    where: { id: id }
-  });
-
-  if (affectedCount === 0) {
-    return null; // Ou gérer l'erreur si l'utilisateur n'existe pas
-  }
-
-  // 2. Récupérer et retourner l'objet mis à jour 
-  return await User.findByPk(id, { raw: true });
-}
 
   static async findById(id: string) {
     return User.findByPk(id);

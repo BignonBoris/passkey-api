@@ -208,6 +208,61 @@ export const swaggerSpec = swaggerJSDoc({
             data: { $ref: "#/components/schemas/User" },
           },
         },
+        Payment: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "0d4b7db8-6f3b-4bb3-9d96-48f5a7d9f1f0" },
+            orderId: { type: "string", example: "a3f93c02-6d27-43ce-9daa-30ef4e5c1ab2" },
+            userId: { type: "string", example: "7a2fd4de-4c11-46f2-8715-e9d25efed001" },
+            driverId: { type: "string", nullable: true, example: "c8a2d6b2-c0b7-4a4f-9c10-d7c5fd880111" },
+            amount: { type: "number", example: 1500 },
+            currency: { type: "string", example: "XOF" },
+            status: { type: "string", enum: ["PENDING", "PAID", "FAILED", "REFUNDED"], example: "PENDING" },
+            method: { type: "string", enum: ["CASH", "CARD", "MOBILE_MONEY"], example: "MOBILE_MONEY" },
+            provider: { type: "string", example: "FEDAPAY" },
+            providerTransactionId: { type: "string", nullable: true, example: "12345678" },
+            providerReference: { type: "string", nullable: true, example: "TXN-REF-001" },
+            merchantReference: { type: "string", nullable: true, example: "PAY-0d4b7db8-6f3b-4bb3-9d96-48f5a7d9f1f0" },
+            checkoutUrl: { type: "string", nullable: true, example: "https://sandbox-checkout.fedapay.com/..." },
+            callbackUrl: { type: "string", nullable: true, example: "http://localhost:3000/api/payments/fedapay/callback?paymentId=..." },
+            paidAt: { type: "string", format: "date-time", nullable: true },
+            failureReason: { type: "string", nullable: true },
+            callbackReceivedAt: { type: "string", format: "date-time", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        PaymentCheckoutResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            message: { type: "string", example: "Checkout FedaPay cree" },
+            data: {
+              type: "object",
+              properties: {
+                payment: { $ref: "#/components/schemas/Payment" },
+                checkoutUrl: {
+                  type: "string",
+                  nullable: true,
+                  example: "https://sandbox-checkout.fedapay.com/..."
+                },
+                checkoutToken: {
+                  type: "string",
+                  nullable: true,
+                  example: "tok_xxxxxxxxx"
+                },
+              },
+            },
+          },
+        },
+        PaymentStatusResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            message: { type: "string", example: "Statut synchronise" },
+            data: { $ref: "#/components/schemas/Payment" },
+          },
+        },
         UpdateAccountStatusRequest: {
           type: "object",
           required: ["accountStatus"],
@@ -416,10 +471,180 @@ export const swaggerSpec = swaggerJSDoc({
         },
       },
     },
+    paths: {
+      "/payments/test-checkout": {
+        post: {
+          tags: ["Payments"],
+          summary: "Creer un checkout FedaPay de test",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    amount: { type: "number", example: 500 },
+                    description: { type: "string", example: "Paiement test PassKey" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Checkout cree",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PaymentCheckoutResponse" },
+                },
+              },
+            },
+            401: { description: "Non authentifie" },
+            503: { description: "FedaPay non configure" },
+          },
+        },
+      },
+      "/payments/orders/{orderId}/checkout": {
+        post: {
+          tags: ["Payments"],
+          summary: "Creer le checkout FedaPay d'une course",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "orderId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+              description: "ID de la course a payer",
+            },
+          ],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string", example: "Paiement de la course" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Checkout cree",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PaymentCheckoutResponse" },
+                },
+              },
+            },
+            200: {
+              description: "Paiement deja effectue",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PaymentCheckoutResponse" },
+                },
+              },
+            },
+            401: { description: "Non authentifie" },
+            403: { description: "Acces refuse" },
+            404: { description: "Course introuvable" },
+          },
+        },
+      },
+      "/payments/{paymentId}": {
+        get: {
+          tags: ["Payments"],
+          summary: "Obtenir le statut d'un paiement",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "paymentId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Statut du paiement",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PaymentStatusResponse" },
+                },
+              },
+            },
+            401: { description: "Non authentifie" },
+            403: { description: "Acces refuse" },
+            404: { description: "Paiement introuvable" },
+          },
+        },
+      },
+      "/payments/{paymentId}/sync": {
+        post: {
+          tags: ["Payments"],
+          summary: "Synchroniser le statut d'un paiement FedaPay",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: "paymentId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Paiement synchronise",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PaymentStatusResponse" },
+                },
+              },
+            },
+            401: { description: "Non authentifie" },
+            403: { description: "Acces refuse" },
+            404: { description: "Paiement introuvable" },
+          },
+        },
+      },
+      "/payments/fedapay/callback": {
+        get: {
+          tags: ["Payments"],
+          summary: "Callback navigateur FedaPay",
+          parameters: [
+            {
+              name: "paymentId",
+              in: "query",
+              required: false,
+              schema: { type: "string" },
+              description: "ID interne du paiement PassKey",
+            },
+          ],
+          responses: {
+            200: {
+              description: "Page HTML de retour application",
+              content: {
+                "text/html": {
+                  schema: {
+                    type: "string",
+                    example: "<html><body>Paiement traite</body></html>",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
 
     tags: [
       { name: "Auth", description: "Authentication OTP + JWT" },
       { name: "Users", description: "Users management" },
+      { name: "Payments", description: "Paiements et checkout FedaPay" },
       { name: "Dashboard", description: "Dashboard metrics and lists" },
       { name: "Drivers", description: "Drivers & availability" },
       { name: "Bookings", description: "Rides & Deliveries" },

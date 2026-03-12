@@ -13,6 +13,7 @@ class User extends Model {
   public isAvailable!: boolean;
   public latitude?: number;
   public longitude?: number;
+  public locationUpdatedAt?: Date | null;
   public city?: string | null;
   public dateOfBirth?: Date | null;
   public avatarUrl?: string | null;
@@ -117,6 +118,10 @@ User.init({
   },
   longitude: {
     type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  locationUpdatedAt: {
+    type: DataTypes.DATE,
     allowNull: true,
   },
   city: {

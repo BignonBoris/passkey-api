@@ -5,20 +5,21 @@ import swaggerUi from "swagger-ui-express";
 import { Server } from "socket.io";
 import http from "http";
 import path from "path";
+import User from "./models/user.model";
 
 import routes from "./routes";
 import { swaggerSpec } from "./docs/swagger";
 import { errorHandler } from "./middlewares/errorHandler";
+import { emitUserLocationUpdated } from "./realtime/location.events";
+import { handleFedaPayWebhook } from "./modules/payments/payments.controller";
 
 const app = express();
 
 app.use(cors());
 app.use(helmet());
+app.post("/api/payments/webhooks/fedapay", express.raw({ type: "application/json" }), handleFedaPayWebhook);
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
-app.get("/healthz", (_req, res) => {
-  res.status(200).json({ status: "ok" });
-});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -43,6 +44,16 @@ io.on("connection", (socket) => {
   socket.on("join_user_room", (userId: string) => {
     if (!userId) return;
     socket.join(`user_${userId}`);
+  });
+
+  socket.on("location:subscribe", (payload: any) => {
+    const userId = String(payload?.userId || "").trim();
+    const role = String(payload?.role || "").trim().toLowerCase();
+    if (!userId) return;
+    socket.join(`user_${userId}`);
+    if (role) {
+      socket.join(`role_${role}`);
+    }
   });
 
   socket.on("join_chat_room", (conversationId: string) => {
@@ -103,6 +114,35 @@ io.on("connection", (socket) => {
       status: decision,
       driverId,
       createdAt: payload?.createdAt || new Date().toISOString(),
+    });
+  });
+
+  socket.on("location:update", async (payload: any) => {
+    const userId = String(payload?.userId || "").trim();
+    const role = String(payload?.role || "").trim().toLowerCase();
+    const latitude = Number(payload?.latitude);
+    const longitude = Number(payload?.longitude);
+
+    if (!userId || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return;
+    }
+
+    const locationUpdatedAt = new Date();
+    await User.update(
+      {
+        latitude,
+        longitude,
+        locationUpdatedAt,
+      },
+      { where: { id: userId } }
+    );
+
+    emitUserLocationUpdated(io, {
+      userId,
+      role: role || "usager",
+      latitude,
+      longitude,
+      locationUpdatedAt: locationUpdatedAt.toISOString(),
     });
   });
 });

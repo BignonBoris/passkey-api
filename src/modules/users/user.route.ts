@@ -17,7 +17,7 @@ import { PRIVILEGED_ROLES } from "../../constants/roles";
 import { userProfileUpload } from "../../middlewares/upload.middleware";
 
 const router = express.Router();
- 
+
 router.get("/", getUsers);
 router.get("/me", authenticate, getMyProfile);
 router.get("/:id", getUserById);

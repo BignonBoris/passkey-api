@@ -7,6 +7,7 @@ import bcrypt from "bcrypt";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { StatusHistoryRepository } from "../../repositories/status-history.repository";
 import { sendPushNotification } from "../../services/notification.service";
+import { emitUserLocationUpdated } from "../../realtime/location.events";
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -142,7 +143,7 @@ export const updateMyProfile = async (req: AuthenticatedRequest, res: Response) 
 };
 
 export const updateToken = async (
-  req: Request & { user?: { id?: string } }, 
+  req: Request & { user?: { id?: string } },
   res: Response
 ) => {
   try {
@@ -158,7 +159,7 @@ export const updateToken = async (
     }
 
     await UserRepository.updateFcmToken(userId, fcmToken);
-    
+
     res.status(200).json({ message: "FCM Token mis à jour avec succès" });
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error });
@@ -170,7 +171,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     const userId = req.params.id; // ou depuis req.user.id (JWT)
     const dataToUpdate = req.body;
 
-    console.log({userId});
+    console.log({ userId });
     const updatedUser = await UserRepository.updateUser({
       id: userId,
       ...dataToUpdate
@@ -215,7 +216,7 @@ export const getUsers = async (req: Request, res: Response) => {
     const whereClause: any = {};
 
     if (role) whereClause.role = role;
-    
+
     // Pour les booleens, on vérifie la chaîne de caractères car req.query reçoit du texte
     if (isActive) whereClause.isActive = isActive === 'true';
     if (isAvailable) whereClause.isAvailable = isAvailable === 'true';
@@ -479,18 +480,19 @@ export const updateUserLocation = async (
       id: userId,
       latitude: Number(latitude),
       longitude: Number(longitude),
+      locationUpdatedAt: new Date(),
     } as any);
 
     // Emission Socket pour le temps réel
-    if (updatedUser && updatedUser.getDataValue('role') === 'livreur') {
-      const io = (req as any).io;
-      if (io) {
-        io.to('drivers').emit('driver:location_updated', {
-          id: userId,
-          latitude: Number(latitude),
-          longitude: Number(longitude),
-        });
-      }
+    const io = (req as any).io;
+    if (io && updatedUser) {
+      emitUserLocationUpdated(io, {
+        userId,
+        role: String((updatedUser as any).role || "usager"),
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        locationUpdatedAt: new Date().toISOString(),
+      });
     }
 
     return res.status(200).json({

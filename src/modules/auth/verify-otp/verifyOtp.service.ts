@@ -8,7 +8,7 @@ export class VerifyOtpService {
 
     const user = await UserRepository.findByPhone(phone);
 
-    if(!user) {
+    if (!user) {
       return {
         success: false,
         message: "User not found",

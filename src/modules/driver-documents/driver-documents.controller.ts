@@ -168,12 +168,12 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
 
     const vehicleData = latestVehicle
       ? {
-          id: latestVehicle.get("id"),
-          type: latestVehicle.get("type"),
-          brand: latestVehicle.get("brand"),
-          year: latestVehicle.get("year"),
-          plateNumber: latestVehicle.get("plateNumber"),
-        }
+        id: latestVehicle.get("id"),
+        type: latestVehicle.get("type"),
+        brand: latestVehicle.get("brand"),
+        year: latestVehicle.get("year"),
+        plateNumber: latestVehicle.get("plateNumber"),
+      }
       : null;
 
     const driverData = {
@@ -203,12 +203,12 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
         onboardingState: canAccessCourier
           ? "APPROVED"
           : hasRejected
-          ? "REJECTED"
-          : allApproved
-          ? "APPROVED"
-          : hasPending || hasSubmittedOnboarding
-          ? "PENDING"
-          : "INCOMPLETE",
+            ? "REJECTED"
+            : allApproved
+              ? "APPROVED"
+              : hasPending || hasSubmittedOnboarding
+                ? "PENDING"
+                : "INCOMPLETE",
         driver: driverData,
         vehicle: vehicleData,
         documents,
