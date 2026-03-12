@@ -2,11 +2,11 @@
   "name": "api",
   "version": "1.0.0",
   "description": "e-Cheetah Backend API",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "render-build": "npm ci && npm run build"
   },
   "type": "commonjs",
