@@ -28,7 +28,8 @@ import User from "./models/user.model";
 import bcrypt from "bcrypt";
 import { DataTypes } from "sequelize";
 
-const PORT = process.env.PORT || 3000;
+// const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
 async function startServer() {
   try {
