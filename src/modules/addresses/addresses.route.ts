@@ -5,7 +5,7 @@ import {
   listMyAddresses,
   updateMyAddress,
 } from "./addresses.controller";
-import { authenticate } from "@/middlewares/auth.middleware";
+import { authenticate } from "../../middlewares/auth.middleware";
 
 const router = express.Router();
 

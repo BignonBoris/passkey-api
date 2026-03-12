@@ -1,9 +1,9 @@
 import bcrypt from "bcrypt";
-import User from "@/models/user.model";
-import { generateOTP } from "@/utils/otp";
-import { UserRepository } from "@/repositories/user.repository";
+import User from "../../models/user.model";
+import { generateOTP } from "../../utils/otp";
+import { UserRepository } from "../../repositories/user.repository";
 import jwt from "jsonwebtoken";
-import { JWT_EXPIRES_IN, JWT_SECRET } from "@/config/jwt";
+import { JWT_EXPIRES_IN, JWT_SECRET } from "../../config/jwt";
 
 type AdminSignUpInput = {
   name?: string;

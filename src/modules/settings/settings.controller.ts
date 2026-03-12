@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import AppSettings, {
   SettingsSection,
   normalizeSettingsContent,
-} from "@/models/app-settings.model";
+} from "../../models/app-settings.model";
 
 const PREDEFINED_SECTIONS: SettingsSection[] = ["contact", "about"];
 

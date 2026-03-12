@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
+import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);

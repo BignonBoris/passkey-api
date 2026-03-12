@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import ServiceZone from "@/models/service-zone.model";
+import ServiceZone from "../../models/service-zone.model";
 
 export async function listZones(req: Request, res: Response) {
   try {

@@ -12,9 +12,9 @@ import {
   updateUserLocation,
   deleteUser,
 } from "./user.controller";
-import { authenticate, authorize } from "@/middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "@/constants/roles";
-import { userProfileUpload } from "@/middlewares/upload.middleware";
+import { authenticate, authorize } from "../../middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "../../constants/roles";
+import { userProfileUpload } from "../../middlewares/upload.middleware";
 
 const router = express.Router();
  

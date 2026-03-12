@@ -1,4 +1,4 @@
-import DriverRevenueConfig from "@/models/driver-revenue-config.model";
+import DriverRevenueConfig from "../models/driver-revenue-config.model";
 
 export interface RevenueCalculationInput {
   distanceKm: number;

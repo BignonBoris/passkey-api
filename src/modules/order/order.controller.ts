@@ -1,14 +1,14 @@
 import { Request, Response } from 'express';
 import { sendNotificationToDriver } from '../../services/notification.service';
 import { Server } from 'socket.io';
-import User from '@/models/user.model';
+import User from '../../models/user.model';
 import { Op } from 'sequelize';
-import Order from '@/models/order.model';
-import UserAddress from '@/models/user-address.model';
-import DriverVehicle from "@/models/driver-vehicle.model";
-import DriverDocument from "@/models/driver-document.model";
-import DriverRevenueConfig from "@/models/driver-revenue-config.model";
-import { calculateDriverRevenue } from "@/services/revenue.service";
+import Order from '../../models/order.model';
+import UserAddress from '../../models/user-address.model';
+import DriverVehicle from "../../models/driver-vehicle.model";
+import DriverDocument from "../../models/driver-document.model";
+import DriverRevenueConfig from "../../models/driver-revenue-config.model";
+import { calculateDriverRevenue } from "../../services/revenue.service";
 
 const DELIVERY_STATUSES = ["PENDING", "ACCEPTED", "PICKED_UP", "IN_TRANSIT", "COMPLETED", "CANCELLED"] as const;
 

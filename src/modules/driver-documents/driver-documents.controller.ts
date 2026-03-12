@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import DriverDocument from "@/models/driver-document.model";
-import User from "@/models/user.model";
-import KycRequest from "@/models/kyc-request.model";
-import DriverVehicle from "@/models/driver-vehicle.model";
-import { AuthenticatedRequest } from "@/types/auth-request";
+import DriverDocument from "../../models/driver-document.model";
+import User from "../../models/user.model";
+import KycRequest from "../../models/kyc-request.model";
+import DriverVehicle from "../../models/driver-vehicle.model";
+import { AuthenticatedRequest } from "../../types/auth-request";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",

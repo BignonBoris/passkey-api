@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { UserRole } from "@/constants/roles";
+import { UserRole } from "../constants/roles";
 
 export interface AuthUser {
   id: string;

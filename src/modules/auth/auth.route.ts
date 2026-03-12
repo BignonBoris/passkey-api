@@ -10,7 +10,7 @@ import {
   signIn,
   signUp,
 } from "./authFlow.controller";
-import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import { authenticate, authorize } from "../../middlewares/auth.middleware";
 
 const router = Router();
 

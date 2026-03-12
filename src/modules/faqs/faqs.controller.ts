@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import Faq from "@/models/faq.model";
+import Faq from "../../models/faq.model";
 
 export async function listPublicFaqs(req: Request, res: Response) {
   try {

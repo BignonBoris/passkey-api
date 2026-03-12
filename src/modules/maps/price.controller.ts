@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import VehiclePricingConfig from '@/models/vehicle-pricing-config.model';
+import VehiclePricingConfig from '../../models/vehicle-pricing-config.model';
 import { getRouteDetails } from './maps.service';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
