@@ -19,6 +19,7 @@
     "cors": "^2.8.6",
     "express": "^4.19.2",
     "firebase-admin": "^13.6.1",
+    "google-libphonenumber": "^3.2.44",
     "helmet": "^8.1.0",
     "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.3",
