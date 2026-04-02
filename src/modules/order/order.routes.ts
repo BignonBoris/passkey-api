@@ -17,8 +17,8 @@ import {
   updateDriverLocationForDelivery,
   updateOrderStatus
 } from './order.controller';
-import { authenticate, authorize } from "@/middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "@/constants/roles";
+import { authenticate, authorize } from "../../middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "../../constants/roles";
 const express = require('express');
 const router = express.Router();
 

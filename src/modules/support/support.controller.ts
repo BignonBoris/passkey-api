@@ -1,12 +1,12 @@
 import { Response } from "express";
 import { Op } from "sequelize";
-import SupportTicket from "@/models/support-ticket.model";
-import SupportTicketMessage from "@/models/support-ticket-message.model";
-import SupportTicketCategory from "@/models/support-ticket-category.model";
-import User from "@/models/user.model";
-import { AuthenticatedRequest } from "@/types/auth-request";
-import { PRIVILEGED_ROLES } from "@/constants/roles";
-import { sendPushNotification } from "@/services/notification.service";
+import SupportTicket from "../../models/support-ticket.model";
+import SupportTicketMessage from "../../models/support-ticket-message.model";
+import SupportTicketCategory from "../../models/support-ticket-category.model";
+import User from "../../models/user.model";
+import { AuthenticatedRequest } from "../../types/auth-request";
+import { PRIVILEGED_ROLES } from "../../constants/roles";
+import { sendPushNotification } from "../../services/notification.service";
 
 const ARCHIVED_CATEGORY_PREFIX = "ARCHIVED|";
 

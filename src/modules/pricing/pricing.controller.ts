@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
-import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
-import { calculateDeliveryPricing } from "@/services/pricing.service";
+import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
+import { calculateDeliveryPricing } from "../../services/pricing.service";
 import {
   listPricingRules,
   upsertPricingRule,
   removePricingRule,
   PricingRulePayload,
-} from "@/services/config.service";
-import PricingRule from "@/models/pricing-rule.model";
-import { resolveCountryId } from "@/services/country.service";
+} from "../../services/config.service";
+import PricingRule from "../../models/pricing-rule.model";
+import { resolveCountryId } from "../../services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);

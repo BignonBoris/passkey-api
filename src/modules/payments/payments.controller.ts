@@ -1,16 +1,16 @@
 import { Response } from "express";
-import Order from "@/models/order.model";
-import Payment from "@/models/payment.model";
-import User from "@/models/user.model";
-import { AuthenticatedRequest } from "@/types/auth-request";
+import Order from "../../models/order.model";
+import Payment from "../../models/payment.model";
+import User from "../../models/user.model";
+import { AuthenticatedRequest } from "../../types/auth-request";
 import axios from "axios";
 import {
   createFedaPayCheckout,
   extractFedaPayTransactionIdFromWebhook,
   isFedaPayConfigured,
   syncPaymentWithFedaPay,
-} from "@/services/fedapay.service";
-import { sendPushNotification } from "@/services/notification.service";
+} from "../../services/fedapay.service";
+import { sendPushNotification } from "../../services/notification.service";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();

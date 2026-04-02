@@ -1,14 +1,14 @@
 import { Request, Response } from "express";
 import { UserService } from "./user.service";
 import { UserRepository } from "./user.repository";
-import User from "@/models/user.model";
+import User from "../../models/user.model";
 import { Op } from "sequelize";
 import bcrypt from "bcrypt";
-import { AuthenticatedRequest } from "@/types/auth-request";
-import { StatusHistoryRepository } from "@/repositories/status-history.repository";
-import { sendPushNotification } from "@/services/notification.service";
-import { emitUserLocationUpdated } from "@/realtime/location.events";
-import { resolveCountryFromCoordinates } from "@/services/country.service";
+import { AuthenticatedRequest } from "../../types/auth-request";
+import { StatusHistoryRepository } from "../../repositories/status-history.repository";
+import { sendPushNotification } from "../../services/notification.service";
+import { emitUserLocationUpdated } from "../../realtime/location.events";
+import { resolveCountryFromCoordinates } from "../../services/country.service";
 
 function toSafeUser(user: any) {
   if (!user) return user;
