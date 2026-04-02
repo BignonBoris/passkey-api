@@ -1,9 +1,11 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
 import User from "./user.model";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 class Order extends Model {
   public id!: string;
+  public countryId!: string;
   public userId!: string;
   public driverId?: string;
   public driverVehicleId?: string;
@@ -18,6 +20,11 @@ class Order extends Model {
   public revenuePerDelivery!: number;
   public platformCommission!: number;
   public serviceFee!: number;
+  public orderType!: string;
+  public merchantId?: string | null;
+  public merchantName?: string | null;
+  public itemCount!: number;
+  public foodOrderPayloadJson?: string | null;
   public vehicleType!: string;
   public status!: string;
   public driverArrivedPickupAt?: Date | null;
@@ -32,6 +39,12 @@ class Order extends Model {
   public nightSurcharge!: number;
   public earlyMorningSurcharge!: number;
   public pricingSnapshotJson?: string | null;
+  public parcelNature?: string | null;
+  public packageDescription?: string | null;
+  public driverRating?: number | null;
+  public driverRatingComment?: string | null;
+  public driverRatedAt?: Date | null;
+  public ratedByUserId?: string | null;
   public isArchived!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -43,6 +56,11 @@ Order.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    countryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      defaultValue: DEFAULT_COUNTRY_ID,
     },
     userId: {
       type: DataTypes.UUID,
@@ -105,6 +123,28 @@ Order.init(
       allowNull: false,
       defaultValue: 0,
     },
+    orderType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "mobility",
+    },
+    merchantId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    merchantName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    itemCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    foodOrderPayloadJson: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
+    },
     peakSurcharge: {
       type: DataTypes.FLOAT,
       allowNull: false,
@@ -123,6 +163,31 @@ Order.init(
     pricingSnapshotJson: {
       type: DataTypes.TEXT("long"),
       allowNull: true,
+    },
+    parcelNature: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    packageDescription: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    driverRating: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    driverRatingComment: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    driverRatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    ratedByUserId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: User, key: "id" },
     },
     vehicleType: {
       type: DataTypes.STRING,

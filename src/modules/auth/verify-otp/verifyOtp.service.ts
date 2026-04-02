@@ -1,17 +1,29 @@
 import jwt from "jsonwebtoken";
-import { JWT_SECRET, JWT_EXPIRES_IN } from "../../../config/jwt";
-import { UserRepository } from "../../../repositories/user.repository";
-import User from "../../../models/user.model";
+import { JWT_SECRET, JWT_EXPIRES_IN } from "@/config/jwt";
+import { UserRepository } from "@/repositories/user.repository";
+import User from "@/models/user.model";
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
 
 export class VerifyOtpService {
-  static async verifyOTP(phone: string, otp: string) {
+  static async verifyOTP(phone: string, role: string, otp: string) {
 
-    const user = await UserRepository.findByPhone(phone);
+    const normalizedPhone = await nomalizeCustomerPhone(phone);
+
+    const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     if (!user) {
       return {
         success: false,
+        status: 404,
         message: "User not found",
+      };
+    }
+
+    if (user.accountStatus === "suspended") {
+      return {
+        success: false,
+        status: 403,
+        message: "Votre compte est bloque. Contactez le support.",
       };
     }
 
@@ -24,14 +36,19 @@ export class VerifyOtpService {
     ) {
       return {
         success: false,
-        message: "Invalid or expired OTP",
+        status: 400,
+        message: "Le code OTP a expiré.",
       };
     }
 
-    await User.update(
-      { otpCode: null, otpExpiresAt: null },
-      { where: { id: user.id } }
-    );
+    // Only activate automatically for non-courier roles. 
+    // Couriers are activated manually by admin after validation.
+    const updateData: any = { otpCode: null, otpExpiresAt: null };
+    if (user.role !== "livreur") {
+      updateData.isActive = true;
+    }
+
+    await User.update(updateData, { where: { id: user.id } });
 
     // const updatedUser = await UserRepository.updateUser(user);
 
@@ -42,8 +59,10 @@ export class VerifyOtpService {
       throw new Error("User not found after update");
     }
 
+    const canAccessCourier = user.identityVerified;
+
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: user.role, canAccessCourier },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
@@ -51,4 +70,5 @@ export class VerifyOtpService {
 
     return { ...user, token };
   }
+
 }

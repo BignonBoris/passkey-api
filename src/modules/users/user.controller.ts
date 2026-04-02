@@ -1,13 +1,14 @@
 import { Request, Response } from "express";
 import { UserService } from "./user.service";
 import { UserRepository } from "./user.repository";
-import User from '../../models/user.model';
-import { Op } from 'sequelize';
+import User from "@/models/user.model";
+import { Op } from "sequelize";
 import bcrypt from "bcrypt";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import { StatusHistoryRepository } from "../../repositories/status-history.repository";
-import { sendPushNotification } from "../../services/notification.service";
-import { emitUserLocationUpdated } from "../../realtime/location.events";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import { StatusHistoryRepository } from "@/repositories/status-history.repository";
+import { sendPushNotification } from "@/services/notification.service";
+import { emitUserLocationUpdated } from "@/realtime/location.events";
+import { resolveCountryFromCoordinates } from "@/services/country.service";
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -16,7 +17,10 @@ function toSafeUser(user: any) {
   return clone;
 }
 
-export async function getProfile(req: Request & { user?: { id?: string } }, res: Response) {
+export async function getProfile(
+  req: Request & { user?: { id?: string } },
+  res: Response
+) {
   const userId = req.user?.id;
 
   res.json({
@@ -26,7 +30,11 @@ export async function getProfile(req: Request & { user?: { id?: string } }, res:
   });
 }
 
-function buildPublicUploadUrl(req: Request, folder: string, storedName?: string | null) {
+function buildPublicUploadUrl(
+  req: Request,
+  folder: string,
+  storedName?: string | null
+) {
   if (!storedName) return null;
   const protocol = req.protocol || "http";
   const host = req.get("host");
@@ -61,7 +69,10 @@ export const getMyProfile = async (req: AuthenticatedRequest, res: Response) => 
   }
 };
 
-export const updateMyProfile = async (req: AuthenticatedRequest, res: Response) => {
+export const updateMyProfile = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -73,7 +84,10 @@ export const updateMyProfile = async (req: AuthenticatedRequest, res: Response) 
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    const { name, email, phone, password } = (req.body || {}) as Record<string, string | undefined>;
+    const { name, email, phone, password } = (req.body || {}) as Record<
+      string,
+      string | undefined
+    >;
     const file = (req as any).file as { filename?: string } | undefined;
 
     if (typeof name === "string") user.set("name", name.trim());
@@ -88,7 +102,9 @@ export const updateMyProfile = async (req: AuthenticatedRequest, res: Response) 
           },
         });
         if (existingEmail) {
-          return res.status(409).json({ success: false, message: "Cet email est déjà utilisé." });
+          return res
+            .status(409)
+            .json({ success: false, message: "Cet email est déjà utilisé." });
         }
       }
       user.set("email", normalizedEmail || null);
@@ -104,7 +120,9 @@ export const updateMyProfile = async (req: AuthenticatedRequest, res: Response) 
           },
         });
         if (existingPhone) {
-          return res.status(409).json({ success: false, message: "Ce numéro est déjà utilisé." });
+          return res
+            .status(409)
+            .json({ success: false, message: "Ce numéro est déjà utilisé." });
         }
       }
       user.set("phone", normalizedPhone);
@@ -168,19 +186,23 @@ export const updateToken = async (
 
 export const updateProfile = async (req: Request, res: Response) => {
   try {
-    const userId = req.params.id; // ou depuis req.user.id (JWT)
+    const userId =
+      String(req.params.id || "").trim() ||
+      String((req as any).user?.id || "").trim();
+    if (!userId) {
+      return res.status(400).json({ message: "Identifiant utilisateur requis" });
+    }
     const dataToUpdate = req.body;
 
-    console.log({ userId });
     const updatedUser = await UserRepository.updateUser({
       id: userId,
-      ...dataToUpdate
+      ...dataToUpdate,
     });
 
     if (updatedUser) {
       const io = (req as any).io;
-      if (io && updatedUser.role === 'livreur') {
-        io.to('drivers').emit('driver:profile_updated', toSafeUser(updatedUser));
+      if (io && updatedUser.role === "livreur") {
+        io.to("drivers").emit("driver:profile_updated", toSafeUser(updatedUser));
       }
     }
 
@@ -190,13 +212,14 @@ export const updateProfile = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       message: "Mise à jour réussie",
-      user: updatedUser
+      user: updatedUser,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error?.message || "Unknown server error" });
+    return res
+      .status(500)
+      .json({ error: error?.message || "Unknown server error" });
   }
 };
-
 
 export const getUsers = async (req: Request, res: Response) => {
   try {
@@ -207,6 +230,7 @@ export const getUsers = async (req: Request, res: Response) => {
       name,
       accountStatus,
       identityVerified,
+      countryId,
       search,
       dateFrom,
       dateTo,
@@ -218,10 +242,12 @@ export const getUsers = async (req: Request, res: Response) => {
     if (role) whereClause.role = role;
 
     // Pour les booleens, on vérifie la chaîne de caractères car req.query reçoit du texte
-    if (isActive) whereClause.isActive = isActive === 'true';
-    if (isAvailable) whereClause.isAvailable = isAvailable === 'true';
+    if (isActive) whereClause.isActive = isActive === "true";
+    if (isAvailable) whereClause.isAvailable = isAvailable === "true";
     if (accountStatus) whereClause.accountStatus = accountStatus;
-    if (identityVerified) whereClause.identityVerified = identityVerified === "true";
+    if (identityVerified)
+      whereClause.identityVerified = identityVerified === "true";
+    if (countryId) whereClause.countryId = countryId;
 
     // Filtre de recherche par nom/téléphone/email
     if (search || name) {
@@ -243,14 +269,14 @@ export const getUsers = async (req: Request, res: Response) => {
 
     const users = await User.findAll({
       where: whereClause,
-      attributes: { exclude: ['password'] }, // Sécurité : on n'envoie jamais le mot de passe
-      order: [['createdAt', 'DESC']]
+      attributes: { exclude: ["password"] }, // Sécurité : on n'envoie jamais le mot de passe
+      order: [["createdAt", "DESC"]],
     });
 
     return res.status(200).json({
       success: true,
       count: users.length,
-      data: users
+      data: users,
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -264,7 +290,8 @@ export const updateUserAccountStatus = async (
   try {
     const userId = req.params.id;
     const accountStatus = req.body?.accountStatus;
-    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined;
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined;
 
     if (accountStatus !== "active" && accountStatus !== "suspended") {
       return res.status(400).json({
@@ -301,12 +328,12 @@ export const updateUserAccountStatus = async (
 
     const safeUser = toSafeUser(updatedUser);
 
-    if (safeUser.role === 'livreur') {
+    if (safeUser.role === "livreur") {
       const io = (req as any).io;
       if (io) {
-        io.to('drivers').emit('driver:status_updated', {
+        io.to("drivers").emit("driver:status_updated", {
           id: userId,
-          accountStatus: safeUser.accountStatus
+          accountStatus: safeUser.accountStatus,
         });
       }
     }
@@ -345,7 +372,9 @@ export const getUserById = async (req: Request, res: Response) => {
 
     return res.status(200).json({ success: true, data: user });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Unknown server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: error?.message || "Unknown server error" });
   }
 };
 
@@ -355,7 +384,9 @@ export const getUserHistory = async (req: Request, res: Response) => {
     const history = await StatusHistoryRepository.listByUserId(userId);
     return res.status(200).json({ success: true, data: history });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Unknown server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: error?.message || "Unknown server error" });
   }
 };
 
@@ -383,13 +414,18 @@ export const updateIdentityVerified = async (
     }
 
     const targetRole = String(user.getDataValue("role") || "");
-    const shouldActivateDriver = identityVerified === true && targetRole === "livreur";
 
     const updatedUser = await UserRepository.updateIdentityVerified({
       userId,
       identityVerified,
-      activateDriver: shouldActivateDriver,
     });
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User update failed",
+      });
+    }
 
     const safeUser = toSafeUser(updatedUser);
 
@@ -416,9 +452,9 @@ export const updateIdentityVerified = async (
       if (io) {
         io.to(`user_${userId}`).emit("driver:verification_completed", payload);
         // Informer le dashboard admin ou les usagers du changement de statut du livreur
-        io.to('drivers').emit('driver:verification_updated', {
+        io.to("drivers").emit("driver:verification_updated", {
           id: userId,
-          identityVerified: true
+          identityVerified: true,
         });
       }
 
@@ -435,6 +471,22 @@ export const updateIdentityVerified = async (
           {
             type: "DRIVER_VERIFICATION_APPROVED",
             route: "/delivery",
+            userId,
+            title: "Verification du dossier",
+            message:
+              "Votre dossier est complet. Vous etes eligible pour l'activite livreur.",
+            createdAt: new Date().toISOString(),
+          },
+          {
+            room: `user_${userId}`,
+            event: "driver:verification_completed",
+            payload: {
+              type: "DRIVER_VERIFICATION_APPROVED",
+              title: "Verification du dossier",
+              message:
+                "Votre dossier est complet. Vous etes eligible pour l'activite livreur.",
+              userId,
+            },
           }
         );
       }
@@ -476,11 +528,16 @@ export const updateUserLocation = async (
       });
     }
 
+    const countryResolution = await resolveCountryFromCoordinates(
+      Number(latitude),
+      Number(longitude)
+    );
     const updatedUser = await UserRepository.updateUser({
       id: userId,
       latitude: Number(latitude),
       longitude: Number(longitude),
       locationUpdatedAt: new Date(),
+      countryId: String(countryResolution.country.get("id") || ""),
     } as any);
 
     // Emission Socket pour le temps réel
@@ -499,6 +556,94 @@ export const updateUserLocation = async (
       success: true,
       message: "Location updated",
       data: updatedUser,
+      country: countryResolution.country,
+      matchedByGps: countryResolution.matchedByGps,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Unknown server error",
+    });
+  }
+};
+
+export const updateMyAvailability = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const { isAvailable } = req.body || {};
+    if (typeof isAvailable !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isAvailable must be boolean",
+      });
+    }
+
+    const user = await UserRepository.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (String(user.getDataValue("role") || "") !== "livreur") {
+      return res.status(403).json({
+        success: false,
+        message: "Only drivers can update availability",
+      });
+    }
+
+    if (
+      !user.getDataValue("isActive") ||
+      !user.getDataValue("identityVerified")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Votre compte doit être activé par un administrateur pour passer en ligne.",
+      });
+    }
+
+    const updatedUser = await UserRepository.updateUser({
+      id: userId,
+      isAvailable,
+    } as any);
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const safeUser = toSafeUser(updatedUser);
+    const io = (req as any).io;
+    if (io && safeUser.role === "livreur") {
+      io.to("drivers").emit("driver:profile_updated", safeUser);
+      io.to("drivers").emit("driver:availability_updated", {
+        id: userId,
+        isAvailable,
+      });
+      io.to(`user_${userId}`).emit("driver:availability_updated", {
+        id: userId,
+        isAvailable,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Availability updated",
+      data: safeUser,
     });
   } catch (error: any) {
     return res.status(500).json({
@@ -530,7 +675,10 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const targetRole = targetUser.getDataValue("role");
-    if ((targetRole === "admin" || targetRole === "sous-admin") && actorRole !== "admin") {
+    if (
+      (targetRole === "admin" || targetRole === "sous-admin") &&
+      actorRole !== "admin"
+    ) {
       return res.status(403).json({
         success: false,
         message: "Seul un admin peut supprimer un compte admin.",

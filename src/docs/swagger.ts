@@ -27,15 +27,8 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           required: ["phone", "role"],
           properties: {
-            phone: {
-              type: "string",
-              example: "+22961234567",
-            },
-            role: {
-              type: "string",
-              enum: ["usager", "livreur", "admin", "sous-admin"],
-              example: "usager",
-            },
+            phone: { type: "string", example: "+22961234567" },
+            role: { type: "string", enum: ["usager", "livreur", "admin", "sous-admin"], example: "usager" },
           },
         },
         PhoneCheckResponse: {
@@ -100,50 +93,27 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           required: ["phone"],
           properties: {
-            phone: {
-              type: "string",
-              example: "+22961234567",
-            },
-            password: {
-              type: "string",
-              example: "superSecret123",
-            },
+            phone: { type: "string", example: "+22961234567" },
+            password: { type: "string", example: "superSecret123" },
           },
         },
-
         VerifyOtpRequest: {
           type: "object",
           required: ["phone", "otp"],
           properties: {
-            phone: {
-              type: "string",
-              example: "+22961234567",
-            },
-            otp: {
-              type: "string",
-              example: "123456",
-            },
+            phone: { type: "string", example: "+22961234567" },
+            otp: { type: "string", example: "123456" },
           },
         },
-
         AuthResponse: {
           type: "object",
           properties: {
-            success: {
-              type: "boolean",
-              example: true,
-            },
-            message: {
-              type: "string",
-              example: "Authentication successful",
-            },
+            success: { type: "boolean", example: true },
+            message: { type: "string", example: "Authentication successful" },
             data: {
               type: "object",
               properties: {
-                token: {
-                  type: "string",
-                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                },
+                token: { type: "string", example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
                 user: {
                   type: "object",
                   properties: {
@@ -173,6 +143,7 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           properties: {
             id: { type: "string" },
+            countryId: { type: "string", format: "uuid" },
             phone: { type: "string" },
             email: { type: "string", nullable: true },
             name: { type: "string", nullable: true },
@@ -186,6 +157,8 @@ export const swaggerSpec = swaggerJSDoc({
             suspendedBy: { type: "string", nullable: true },
             reactivatedAt: { type: "string", format: "date-time", nullable: true },
             reactivatedBy: { type: "string", nullable: true },
+            rating: { type: "number", example: 4.8 },
+            ratingCount: { type: "integer", example: 120 },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
           },
@@ -208,6 +181,43 @@ export const swaggerSpec = swaggerJSDoc({
             data: { $ref: "#/components/schemas/User" },
           },
         },
+        Order: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            countryId: { type: "string", format: "uuid" },
+            userId: { type: "string", format: "uuid" },
+            driverId: { type: "string", format: "uuid", nullable: true },
+            pickupLocation: { type: "string", example: "6.37,2.39" },
+            pickupAddress: { type: "string", example: "Rue 123, Cotonou" },
+            destinationLocation: { type: "string", example: "6.38,2.40" },
+            destinationAddress: { type: "string", example: "Rue 456, Cotonou" },
+            price: { type: "number", example: 1500 },
+            distance: { type: "string", example: "5.2 km" },
+            driverRating: { type: "number", example: 5, nullable: true },
+            driverRatingComment: { type: "string", nullable: true },
+            driverRatedAt: { type: "string", format: "date-time", nullable: true },
+            ratedByUserId: { type: "string", format: "uuid", nullable: true },
+            status: { 
+              type: "string", 
+              enum: ["PENDING", "ACCEPTED", "DRIVER_ASSIGNED", "DRIVER_ARRIVED_PICKUP", "DRIVER_LEFT_PICKUP", "PICKED_UP", "IN_TRANSIT", "COMPLETED", "CANCELLED"] 
+            },
+            vehicleType: { type: "string", example: "moto" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        OrderResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: { $ref: "#/components/schemas/Order" },
+          },
+        },
+        OrderListResponse: {
+          type: "array",
+          items: { $ref: "#/components/schemas/Order" },
+        },
         Payment: {
           type: "object",
           properties: {
@@ -224,10 +234,7 @@ export const swaggerSpec = swaggerJSDoc({
             providerReference: { type: "string", nullable: true, example: "TXN-REF-001" },
             merchantReference: { type: "string", nullable: true, example: "PAY-0d4b7db8-6f3b-4bb3-9d96-48f5a7d9f1f0" },
             checkoutUrl: { type: "string", nullable: true, example: "https://sandbox-checkout.fedapay.com/..." },
-            callbackUrl: { type: "string", nullable: true, example: "http://localhost:3000/api/payments/fedapay/callback?paymentId=..." },
             paidAt: { type: "string", format: "date-time", nullable: true },
-            failureReason: { type: "string", nullable: true },
-            callbackReceivedAt: { type: "string", format: "date-time", nullable: true },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
           },
@@ -241,16 +248,8 @@ export const swaggerSpec = swaggerJSDoc({
               type: "object",
               properties: {
                 payment: { $ref: "#/components/schemas/Payment" },
-                checkoutUrl: {
-                  type: "string",
-                  nullable: true,
-                  example: "https://sandbox-checkout.fedapay.com/..."
-                },
-                checkoutToken: {
-                  type: "string",
-                  nullable: true,
-                  example: "tok_xxxxxxxxx"
-                },
+                checkoutUrl: { type: "string", nullable: true, example: "https://sandbox-checkout.fedapay.com/..." },
+                checkoutToken: { type: "string", nullable: true, example: "tok_xxxxxxxxx" },
               },
             },
           },
@@ -374,31 +373,6 @@ export const swaggerSpec = swaggerJSDoc({
             reviewedBy: { type: "string", nullable: true },
           },
         },
-        DriverDocument: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            userId: { type: "string" },
-            type: { type: "string" },
-            status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED"] },
-            url: { type: "string", nullable: true },
-            expiresAt: { type: "string", format: "date-time", nullable: true },
-            verifiedAt: { type: "string", format: "date-time", nullable: true },
-            verifiedBy: { type: "string", nullable: true },
-          },
-        },
-        SupportTicket: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            userId: { type: "string", nullable: true },
-            orderId: { type: "string", nullable: true },
-            status: { type: "string", enum: ["OPEN", "PENDING", "RESOLVED", "CLOSED"] },
-            priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "URGENT"] },
-            category: { type: "string", nullable: true },
-            assignedTo: { type: "string", nullable: true },
-          },
-        },
         NotificationLog: {
           type: "object",
           properties: {
@@ -411,70 +385,477 @@ export const swaggerSpec = swaggerJSDoc({
             sentAt: { type: "string", format: "date-time" },
           },
         },
-        RefundRequest: {
+        Country: {
           type: "object",
           properties: {
-            id: { type: "string" },
-            paymentId: { type: "string" },
-            orderId: { type: "string" },
-            userId: { type: "string" },
-            amount: { type: "number" },
-            status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED", "PAID"] },
-            reason: { type: "string", nullable: true },
-            processedBy: { type: "string", nullable: true },
-            processedAt: { type: "string", format: "date-time", nullable: true },
-          },
-        },
-        Promotion: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            code: { type: "string" },
-            status: { type: "string", enum: ["ACTIVE", "INACTIVE", "EXPIRED"] },
-            validFrom: { type: "string", format: "date-time", nullable: true },
-            validTo: { type: "string", format: "date-time", nullable: true },
-            usageLimit: { type: "number", nullable: true },
-            usedCount: { type: "number" },
-          },
-        },
-        PromotionRedemption: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            promotionId: { type: "string" },
-            userId: { type: "string" },
-            orderId: { type: "string", nullable: true },
-            amount: { type: "number" },
-          },
-        },
-        Incident: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            orderId: { type: "string", nullable: true },
-            driverId: { type: "string", nullable: true },
-            type: { type: "string" },
-            priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
-            status: { type: "string", enum: ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] },
-            resolvedAt: { type: "string", format: "date-time", nullable: true },
+            id: { type: "string", format: "uuid" },
+            code: { type: "string", example: "benin" },
+            iso2: { type: "string", example: "BJ" },
+            iso3: { type: "string", example: "BEN" },
+            name: { type: "string", example: "Benin" },
+            phoneCode: { type: "string", example: "+229" },
+            currencyCode: { type: "string", example: "XOF" },
+            minLatitude: { type: "number", nullable: true },
+            maxLatitude: { type: "number", nullable: true },
+            minLongitude: { type: "number", nullable: true },
+            maxLongitude: { type: "number", nullable: true },
+            centerLatitude: { type: "number", nullable: true },
+            centerLongitude: { type: "number", nullable: true },
+            isActive: { type: "boolean" },
+            isDefault: { type: "boolean" },
           },
         },
         ServiceZone: {
           type: "object",
           properties: {
             id: { type: "string" },
+            countryId: { type: "string", format: "uuid" },
             name: { type: "string" },
             city: { type: "string", nullable: true },
             status: { type: "string", enum: ["ACTIVE", "INACTIVE"] },
             polygon: { type: "object", nullable: true },
           },
         },
-        DevResetResponse: {
+        Address: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            userId: { type: "string", format: "uuid" },
+            label: { type: "string", example: "Maison" },
+            mapLabel: { type: "string", example: "Rue 123, Cotonou" },
+            latitude: { type: "number", example: 6.37 },
+            longitude: { type: "number", example: 2.39 },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        AddressListResponse: {
           type: "object",
           properties: {
             success: { type: "boolean", example: true },
-            message: { type: "string", example: "Database reset completed; all tables recreated." },
-            error: { type: "string", nullable: true },
+            count: { type: "number", example: 1 },
+            data: {
+              type: "array",
+              items: { $ref: "#/components/schemas/Address" },
+            },
+          },
+        },
+        Conversation: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            orderId: { type: "string", format: "uuid", nullable: true },
+            lastMessage: { type: "string", nullable: true },
+            lastMessageAt: { type: "string", format: "date-time", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        ChatMessage: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            conversationId: { type: "string", format: "uuid" },
+            senderId: { type: "string", format: "uuid" },
+            recipientId: { type: "string", format: "uuid" },
+            content: { type: "string" },
+            isRead: { type: "boolean" },
+            readAt: { type: "string", format: "date-time", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        DriverDocument: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            userId: { type: "string", format: "uuid" },
+            type: { type: "string", enum: ["ID_CARD", "DRIVER_LICENSE", "ID_PHOTO", "VEHICLE_REGISTRATION", "VEHICLE_INSURANCE"] },
+            status: { type: "string", enum: ["PENDING", "APPROVED", "REJECTED", "MISSING"] },
+            url: { type: "string", nullable: true },
+            expiresAt: { type: "string", format: "date-time", nullable: true },
+            verifiedAt: { type: "string", format: "date-time", nullable: true },
+            verifiedBy: { type: "string", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        DriverOnboardingStatus: {
+          type: "object",
+          properties: {
+            identityVerified: { type: "boolean" },
+            accountStatus: { type: "string" },
+            isActive: { type: "boolean" },
+            isAvailable: { type: "boolean" },
+            hasSubmittedOnboarding: { type: "boolean" },
+            hasAllDocuments: { type: "boolean" },
+            allApproved: { type: "boolean" },
+            canAccessCourier: { type: "boolean" },
+            onboardingState: { type: "string", enum: ["APPROVED", "REJECTED", "PENDING", "INCOMPLETE"] },
+            driver: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                email: { type: "string" },
+                city: { type: "string" },
+                dateOfBirth: { type: "string" },
+              },
+            },
+            vehicle: {
+              type: "object",
+              nullable: true,
+              properties: {
+                id: { type: "string" },
+                type: { type: "string" },
+                brand: { type: "string" },
+                year: { type: "number" },
+                plateNumber: { type: "string" },
+              },
+            },
+            documents: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string" },
+                  status: { type: "string" },
+                  url: { type: "string", nullable: true },
+                  updatedAt: { type: "string", format: "date-time", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        DriverVehicle: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            driverId: { type: "string", format: "uuid" },
+            type: { type: "string", example: "moto" },
+            plateNumber: { type: "string", example: "AB 1234 RB" },
+            brand: { type: "string", nullable: true },
+            model: { type: "string", nullable: true },
+            year: { type: "number", nullable: true },
+            status: { type: "string", enum: ["ACTIVE", "INACTIVE"] },
+            isPrimary: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        Faq: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            question: { type: "string" },
+            answer: { type: "string" },
+            category: { type: "string", nullable: true },
+            isActive: { type: "boolean" },
+            order: { type: "number" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        FoodHomePromo: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "promo-1" },
+            title: { type: "string", example: "-30% sur votre premier repas" },
+            subtitle: { type: "string", example: "Code BIENVENUE, valable sur une selection de restaurants." },
+            ctaLabel: { type: "string", example: "Commander maintenant" },
+            imageUrl: { type: "string", example: "https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg" },
+            colors: { type: "array", items: { type: "string" }, example: ["#FF6A3D", "#FF9A3D"] },
+            icon: { type: "string", example: "local_fire_department_rounded" },
+          },
+        },
+        FoodHomeCategory: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "burger" },
+            name: { type: "string", example: "Burgers" },
+            icon: { type: "string", example: "lunch_dining_rounded" },
+            color: { type: "string", example: "#FF8A3D" },
+          },
+        },
+        FoodHomeRestaurant: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "resto-1" },
+            name: { type: "string", example: "Burger Factory" },
+            description: { type: "string", example: "Smash burgers, frites maison et sauces signatures." },
+            categoryId: { type: "string", example: "burger" },
+            categoryLabel: { type: "string", example: "Burgers" },
+            rating: { type: "number", example: 4.8 },
+            ratingCount: { type: "integer", example: 420 },
+            deliveryMinutes: { type: "integer", example: 24 },
+            deliveryFee: { type: "number", example: 800 },
+            isOpen: { type: "boolean", example: true },
+            isPopular: { type: "boolean", example: true },
+            isRecommended: { type: "boolean", example: true },
+            isNearby: { type: "boolean", example: true },
+            imageUrl: { type: "string", example: "https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg" },
+            accentColor: { type: "string", example: "#FF8A3D" },
+            icon: { type: "string", example: "lunch_dining_rounded" },
+            tags: { type: "array", items: { type: "string" }, example: ["Best seller", "Livraison rapide"] },
+          },
+        },
+        FoodHomeProduct: {
+          type: "object",
+          properties: {
+            id: { type: "string", example: "prod-1" },
+            restaurantId: { type: "string", example: "resto-1" },
+            name: { type: "string", example: "Double Smash Bacon" },
+            description: { type: "string", example: "Deux steaks smash, cheddar fondant, bacon grille et sauce maison." },
+            imageUrl: { type: "string", example: "https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg" },
+            price: { type: "number", example: 4500 },
+            originalPrice: { type: "number", nullable: true, example: 5200 },
+            isAvailable: { type: "boolean", example: true },
+            isPopular: { type: "boolean", example: true },
+            tags: { type: "array", items: { type: "string" }, example: ["Best seller", "Boeuf"] },
+          },
+        },
+        FoodHomeFeedResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: {
+              type: "object",
+              properties: {
+                promos: { type: "array", items: { $ref: "#/components/schemas/FoodHomePromo" } },
+                categories: { type: "array", items: { $ref: "#/components/schemas/FoodHomeCategory" } },
+                restaurants: { type: "array", items: { $ref: "#/components/schemas/FoodHomeRestaurant" } },
+              },
+            },
+          },
+        },
+        FoodCatalogSearchResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: {
+              type: "object",
+              properties: {
+                restaurants: { type: "array", items: { $ref: "#/components/schemas/FoodHomeRestaurant" } },
+                products: {
+                  type: "array",
+                  items: {
+                    allOf: [
+                      { $ref: "#/components/schemas/FoodHomeProduct" },
+                      {
+                        type: "object",
+                        properties: {
+                          restaurant: { $ref: "#/components/schemas/FoodHomeRestaurant" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+        FoodRestaurantDetailResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: {
+              allOf: [
+                { $ref: "#/components/schemas/FoodHomeRestaurant" },
+                {
+                  type: "object",
+                  properties: {
+                    products: { type: "array", items: { $ref: "#/components/schemas/FoodHomeProduct" } },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        FoodProductDetailResponse: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: true },
+            data: {
+              allOf: [
+                { $ref: "#/components/schemas/FoodHomeProduct" },
+                {
+                  type: "object",
+                  properties: {
+                    restaurant: { $ref: "#/components/schemas/FoodHomeRestaurant" },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        VehiclePricingConfig: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            countryId: { type: "string", format: "uuid" },
+            vehicleType: { type: "string" },
+            baseFare: { type: "number" },
+            perKmRate: { type: "number" },
+            perMinuteRate: { type: "number" },
+            bookingFee: { type: "number" },
+            minimumFare: { type: "number" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        PricingRule: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            countryId: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            type: { type: "string", enum: ["SURGE", "DISCOUNT", "FIXED"] },
+            value: { type: "number" },
+            condition: { type: "object", nullable: true },
+            isActive: { type: "boolean" },
+            priority: { type: "number" },
+            startDate: { type: "string", format: "date-time", nullable: true },
+            endDate: { type: "string", format: "date-time", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        DriverRevenueConfig: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            countryId: { type: "string", format: "uuid" },
+            vehicleType: { type: "string" },
+            baseFare: { type: "number" },
+            perKmRate: { type: "number" },
+            perMinuteRate: { type: "number" },
+            commissionPercent: { type: "number" },
+            serviceFeePercent: { type: "number" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        GlobalSettings: {
+          type: "object",
+          properties: {
+            contact: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: { type: "string" },
+                  value: { type: "string" },
+                  icon: { type: "string", nullable: true },
+                },
+              },
+            },
+            about: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: { type: "string" },
+                  value: { type: "string" },
+                  icon: { type: "string", nullable: true },
+                },
+              },
+            },
+            operations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: { type: "string" },
+                  value: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        SupportCategory: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            description: { type: "string", nullable: true },
+            isActive: { type: "boolean" },
+            sortOrder: { type: "number" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        SupportMessage: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            ticketId: { type: "string", format: "uuid" },
+            senderId: { type: "string", format: "uuid" },
+            senderRole: { type: "string" },
+            message: { type: "string" },
+            createdAt: { type: "string", format: "date-time" },
+            sender: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string" },
+                phone: { type: "string" },
+                role: { type: "string" },
+              },
+            },
+          },
+        },
+        SupportTicket: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            userId: { type: "string", format: "uuid" },
+            orderId: { type: "string", format: "uuid", nullable: true },
+            subject: { type: "string", nullable: true },
+            status: { type: "string", enum: ["OPEN", "PENDING", "RESOLVED", "CLOSED"] },
+            priority: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+            category: { type: "string", nullable: true },
+            isArchived: { type: "boolean" },
+            assignedTo: { type: "string", format: "uuid", nullable: true },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+            lastMessageAt: { type: "string", format: "date-time" },
+            requester: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string" },
+                phone: { type: "string" },
+                role: { type: "string" },
+              },
+            },
+            assignedAdmin: {
+              type: "object",
+              nullable: true,
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string" },
+                phone: { type: "string" },
+                role: { type: "string" },
+              },
+            },
+            messages: {
+              type: "array",
+              items: { $ref: "#/components/schemas/SupportMessage" },
+            },
+          },
+        },
+        VehicleType: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            countryId: { type: "string", format: "uuid" },
+            code: { type: "string" },
+            name: { type: "string" },
+            label: { type: "string" },
+            iconKey: { type: "string" },
+            sortOrder: { type: "number" },
+            isActive: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
           },
         },
       },
@@ -647,37 +1028,11 @@ export const swaggerSpec = swaggerJSDoc({
           },
         },
       },
-      "/dev/reset-database": {
-        post: {
-          tags: ["Dev"],
-          summary: "Force rebuilds the database schema",
-          description:
-            "Drops and recreates every table. This is destructive and intended for development/test environments only.",
-          security: [{ BearerAuth: [] }],
-          responses: {
-            200: {
-              description: "Database reset completed",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/DevResetResponse" },
-                },
-              },
-            },
-            500: {
-              description: "Reset failed",
-              content: {
-                "application/json": {
-                  schema: { $ref: "#/components/schemas/DevResetResponse" },
-                },
-              },
-            },
-          },
-        },
-      },
     },
 
     tags: [
       { name: "Auth", description: "Authentication OTP + JWT" },
+      { name: "Maps", description: "Google Maps, geocoding et resolution de lieux" },
       { name: "Users", description: "Users management" },
       { name: "Payments", description: "Paiements et checkout FedaPay" },
       { name: "Dashboard", description: "Dashboard metrics and lists" },
@@ -691,7 +1046,9 @@ export const swaggerSpec = swaggerJSDoc({
       { name: "Notifications", description: "Notification logs" },
       { name: "Incidents", description: "Operational incidents" },
       { name: "Zones", description: "Service zones" },
-      { name: "Dev", description: "Development tooling and helpers" },
+      { name: "VehicleTypes", description: "Types de vehicules par pays" },
+      { name: "Countries", description: "Pays et resolution GPS" },
+      { name: "FoodHome", description: "Contenu de l'accueil Eats" },
     ],
   },
   apis: ["src/modules/**/*.routes.ts", "src/modules/**/*.route.ts"],

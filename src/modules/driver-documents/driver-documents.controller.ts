@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import DriverDocument from "../../models/driver-document.model";
-import User from "../../models/user.model";
-import KycRequest from "../../models/kyc-request.model";
-import DriverVehicle from "../../models/driver-vehicle.model";
-import { AuthenticatedRequest } from "../../types/auth-request";
+import DriverDocument from "@/models/driver-document.model";
+import User from "@/models/user.model";
+import KycRequest from "@/models/kyc-request.model";
+import DriverVehicle from "@/models/driver-vehicle.model";
+import VehicleType from "@/models/vehicle-type.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import { resolveCountryId } from "@/services/country.service";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",
@@ -13,6 +15,14 @@ const REQUIRED_DRIVER_DOC_TYPES = [
   "VEHICLE_REGISTRATION",
   "VEHICLE_INSURANCE",
 ] as const;
+
+async function isAllowedVehicleType(vehicleType: unknown, countryId?: string) {
+  const normalized = String(vehicleType ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  const resolvedCountryId = await resolveCountryId(countryId);
+  const row = await VehicleType.findOne({ where: { code: normalized, isActive: true, countryId: resolvedCountryId } });
+  return Boolean(row);
+}
 
 type RequiredDriverDocType = (typeof REQUIRED_DRIVER_DOC_TYPES)[number];
 
@@ -156,10 +166,9 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
     const hasPending = documents.some((d) => d.status === "PENDING");
     const hasSubmittedOnboarding = Boolean(user.get("hasSubmittedOnboarding"));
     const identityVerified = Boolean(user.get("identityVerified"));
-    const isAccountActive =
-      String(user.get("accountStatus") || "").toLowerCase() === "active" &&
-      Boolean(user.get("isActive"));
-    const canAccessCourier = isAccountActive || identityVerified;
+    
+    // CRITICAL: A courier only has access if they are identityVerified (validated by admin)
+    const canAccessCourier = identityVerified;
 
     const latestVehicle = await DriverVehicle.findOne({
       where: { driverId: req.user.id },
@@ -168,12 +177,12 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
 
     const vehicleData = latestVehicle
       ? {
-        id: latestVehicle.get("id"),
-        type: latestVehicle.get("type"),
-        brand: latestVehicle.get("brand"),
-        year: latestVehicle.get("year"),
-        plateNumber: latestVehicle.get("plateNumber"),
-      }
+          id: latestVehicle.get("id"),
+          type: latestVehicle.get("type"),
+          brand: latestVehicle.get("brand"),
+          year: latestVehicle.get("year"),
+          plateNumber: latestVehicle.get("plateNumber"),
+        }
       : null;
 
     const driverData = {
@@ -203,12 +212,12 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
         onboardingState: canAccessCourier
           ? "APPROVED"
           : hasRejected
-            ? "REJECTED"
-            : allApproved
-              ? "APPROVED"
-              : hasPending || hasSubmittedOnboarding
-                ? "PENDING"
-                : "INCOMPLETE",
+          ? "REJECTED"
+          : allApproved
+          ? "APPROVED"
+          : (hasPending || hasSubmittedOnboarding)
+          ? "PENDING"
+          : "INCOMPLETE",
         driver: driverData,
         vehicle: vehicleData,
         documents,
@@ -224,28 +233,26 @@ export async function listMyDriverVehicleTypes(req: AuthenticatedRequest, res: R
     if (!req.user?.id || req.user.role !== "livreur") {
       return res.status(403).json({ success: false, message: "Only drivers can access this endpoint" });
     }
+    const currentUser = await User.findByPk(req.user.id);
+    const countryId = await resolveCountryId(String(currentUser?.get("countryId") || ""));
 
-    const rows = await DriverVehicle.findAll({
-      attributes: ["type"],
-      where: {
-        type: {
-          [Op.not]: null,
-        },
-      },
-      group: ["type"],
-      order: [["type", "ASC"]],
+    const rows = await VehicleType.findAll({
+      where: { isActive: true, countryId },
+      order: [
+        ["sortOrder", "ASC"],
+        ["name", "ASC"],
+      ],
     });
-
-    const fromDb = rows
-      .map((row) => String(row.get("type") || "").trim())
-      .filter((value) => value.length > 0);
-    const fallback = ["Moto", "Tricycle", "Voiture"];
-
-    const options = Array.from(new Set([...fromDb, ...fallback]));
 
     return res.status(200).json({
       success: true,
-      data: options.map((value) => ({ id: value, label: value })),
+      data: rows.map((row) => ({
+        id: String(row.get("code") || ""),
+        code: String(row.get("code") || ""),
+        label: String(row.get("name") || ""),
+        name: String(row.get("name") || ""),
+        iconKey: String(row.get("iconKey") || "two_wheeler_rounded"),
+      })),
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to list vehicle types" });
@@ -296,6 +303,14 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       return res.status(400).json({
         success: false,
         message: "year is invalid",
+      });
+    }
+
+    const currentUser = await User.findByPk(req.user?.id || "");
+    if (!(await isAllowedVehicleType(vehicleType, String(currentUser?.get("countryId") || "")))) {
+      return res.status(400).json({
+        success: false,
+        message: "Ce type de vehicule n'est pas disponible.",
       });
     }
 
@@ -454,6 +469,14 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
             message: "year is invalid",
           });
         }
+      }
+
+      const currentUser = await User.findByPk(req.user?.id || "");
+      if (vehicleType && !(await isAllowedVehicleType(vehicleType, String(currentUser?.get("countryId") || "")))) {
+        return res.status(400).json({
+          success: false,
+          message: "Ce type de vehicule n'est pas disponible.",
+        });
       }
 
       if (!latestVehicle) {

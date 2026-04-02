@@ -1,6 +1,6 @@
-import { PricingRuleType, PricingAdjustmentType } from "../models/pricing-rule.model";
-import { calculateWaitingFees } from "../services/pricing.service";
-import PricingRule from "../models/pricing-rule.model";
+import { PricingRuleType, PricingAdjustmentType } from "@/models/pricing-rule.model";
+import { calculateWaitingFees } from "@/services/pricing.service";
+import PricingRule from "@/models/pricing-rule.model";
 
 const DEFAULT_DRIVER_SHARE_PERCENTAGE = 0.6;
 const DEFAULT_CANCELLATION_AFTER_FEE = 500;
@@ -27,24 +27,29 @@ export async function calculateCancellationFees(params: {
   orderId: string;
   driverArrivedAt?: Date | null;
   cancelledAt: Date;
+  countryId?: string;
 }) {
-  const { driverArrivedAt, cancelledAt } = params;
+  const { driverArrivedAt, cancelledAt, countryId } = params;
   const isAfterArrival = Boolean(driverArrivedAt && cancelledAt > driverArrivedAt);
   const ruleType = isAfterArrival
     ? PricingRuleType.CANCELLATION_AFTER_ARRIVAL
     : PricingRuleType.CANCELLATION_BEFORE_ARRIVAL;
-  const rule = await loadCancellationRule(ruleType);
+  const rules = await PricingRule.findAll({
+    where: { ruleType, isActive: true, ...(countryId ? { countryId } : {}) },
+    order: [["priority", "DESC"]],
+  });
+  const rule = rules[0] ?? null;
   const freeMinutes = rule?.freeMinutes ?? 0;
   const fixedFee =
     rule?.adjustmentType === PricingAdjustmentType.FIXED
       ? rule.adjustmentValue
       : isAfterArrival
-        ? DEFAULT_CANCELLATION_AFTER_FEE
-        : 0;
+      ? DEFAULT_CANCELLATION_AFTER_FEE
+      : 0;
 
   const waitingData = isAfterArrival
-    ? await calculateWaitingFees(driverArrivedAt ?? cancelledAt, cancelledAt)
-    : await calculateWaitingFees(driverArrivedAt ?? cancelledAt, cancelledAt);
+    ? await calculateWaitingFees(driverArrivedAt ?? cancelledAt, cancelledAt, countryId)
+    : await calculateWaitingFees(driverArrivedAt ?? cancelledAt, cancelledAt, countryId);
   const waitingFee = waitingData.waitingFee;
 
   const cancellationFee = Number((fixedFee + waitingFee).toFixed(2));

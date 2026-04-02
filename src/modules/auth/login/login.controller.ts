@@ -7,6 +7,13 @@ export async function login(req: Request, res: Response) {
   const result = await LoginService.login(body.phone, body.password, body.role );
   // const result = await LoginService.sendOTP(body.phone, body.password);
 
+  if ((result as any).success === false) {
+    return res.status((result as any).status ?? 400).json({
+      success: false,
+      message: (result as any).message ?? "Authentication failed",
+    });
+  }
+
   res.json({
     success: true,
     message: "OTP sent",

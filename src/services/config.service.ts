@@ -1,6 +1,7 @@
-import PricingRule, { PricingRuleType } from "../models/pricing-rule.model";
+import PricingRule, { PricingRuleType } from "@/models/pricing-rule.model";
 
 export interface PricingRulePayload {
+  countryId?: string;
   ruleType: PricingRuleType;
   name: string;
   daysOfWeek?: string;
@@ -14,9 +15,10 @@ export interface PricingRulePayload {
   priority?: number;
 }
 
-export async function listPricingRules(type?: PricingRuleType) {
+export async function listPricingRules(type?: PricingRuleType, countryId?: string) {
   const where: Record<string, unknown> = {};
   if (type) where.ruleType = type;
+  if (countryId) where.countryId = countryId;
   return PricingRule.findAll({
     where,
     order: [["priority", "DESC"], ["updatedAt", "DESC"]],

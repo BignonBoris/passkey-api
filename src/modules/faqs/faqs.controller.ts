@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import Faq from "../../models/faq.model";
+import Faq from "@/models/faq.model";
+
+const MAX_FAQ_QUESTION_LENGTH = 140;
 
 export async function listPublicFaqs(req: Request, res: Response) {
   try {
@@ -61,6 +63,12 @@ export async function createFaq(req: Request, res: Response) {
     if (!answer || !String(answer).trim()) {
       return res.status(400).json({ success: false, message: "answer is required" });
     }
+    if (String(question).trim().length > MAX_FAQ_QUESTION_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `question must not exceed ${MAX_FAQ_QUESTION_LENGTH} characters`,
+      });
+    }
 
     const row = await Faq.create({
       question: String(question).trim(),
@@ -84,6 +92,12 @@ export async function updateFaq(req: Request, res: Response) {
     if (question !== undefined) {
       const value = String(question).trim();
       if (!value) return res.status(400).json({ success: false, message: "question cannot be empty" });
+      if (value.length > MAX_FAQ_QUESTION_LENGTH) {
+        return res.status(400).json({
+          success: false,
+          message: `question must not exceed ${MAX_FAQ_QUESTION_LENGTH} characters`,
+        });
+      }
       row.set("question", value);
     }
 

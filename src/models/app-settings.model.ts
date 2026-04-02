@@ -1,9 +1,15 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
 
-export type SettingsSection = "contact" | "about";
+export type SettingsSection = "contact" | "about" | "operations";
+export type SettingsEntryObject = {
+  value: string;
+  icon?: string;
+};
+export type SettingsEntryValue = string | SettingsEntryObject;
+export type SettingsContent = Record<string, SettingsEntryValue>;
 
-export function normalizeSettingsContent(value: unknown): Record<string, string> {
+export function normalizeSettingsContent(value: unknown): SettingsContent {
   let parsedValue = value;
 
   if (typeof parsedValue === "string") {
@@ -18,18 +24,30 @@ export function normalizeSettingsContent(value: unknown): Record<string, string>
     return {};
   }
 
-  return Object.fromEntries(
-    Object.entries(parsedValue as Record<string, unknown>).map(([key, entryValue]) => [
-      String(key).trim(),
-      String(entryValue ?? "").trim(),
-    ])
-  );
+  const normalizedEntries: Array<[string, SettingsEntryValue]> = [];
+
+  for (const [key, entryValue] of Object.entries(parsedValue as Record<string, unknown>)) {
+    const cleanKey = String(key ?? "").trim();
+    if (!cleanKey) continue;
+
+    if (entryValue && typeof entryValue === "object" && !Array.isArray(entryValue)) {
+      const raw = entryValue as Record<string, unknown>;
+      const value = String(raw.value ?? "").trim();
+      const icon = String(raw.icon ?? raw.iconKey ?? "").trim();
+      normalizedEntries.push([cleanKey, icon ? { value, icon } : { value }]);
+      continue;
+    }
+
+    normalizedEntries.push([cleanKey, String(entryValue ?? "").trim()]);
+  }
+
+  return Object.fromEntries(normalizedEntries) as SettingsContent;
 }
 
 class AppSettings extends Model {
   public id!: string;
   public section!: SettingsSection;
-  public content!: Record<string, string>;
+  public content!: SettingsContent;
 }
 
 AppSettings.init(
@@ -40,7 +58,7 @@ AppSettings.init(
       primaryKey: true,
     },
     section: {
-      type: DataTypes.ENUM("contact", "about"),
+      type: DataTypes.STRING,
       allowNull: false,
       unique: true,
     },

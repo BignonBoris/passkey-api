@@ -1,5 +1,6 @@
 import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/database';
+import { DEFAULT_COUNTRY_ID } from '@/constants/countries';
 
 class User extends Model {
   public id!: string;
@@ -17,6 +18,7 @@ class User extends Model {
   public city?: string | null;
   public dateOfBirth?: Date | null;
   public avatarUrl?: string | null;
+  public countryId!: string;
   public accountStatus!: 'active' | 'suspended';
   public suspensionReason?: string | null;
   public suspendedAt?: Date | null;
@@ -27,6 +29,8 @@ class User extends Model {
   public hasSubmittedOnboarding!: boolean;
   public otpCode?: string | null;
   public otpExpiresAt?: Date | null;
+  public rating!: number;
+  public ratingCount!: number;
 }
 
 User.init({
@@ -37,7 +41,7 @@ User.init({
   },
   phone: {
     type: DataTypes.STRING,
-    unique: true,
+    unique: false,
     allowNull: false,
   },
   email: {
@@ -112,6 +116,16 @@ User.init({
     type: DataTypes.DATE,
     allowNull: true,
   },
+  rating: {
+    type: DataTypes.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+  },
+  ratingCount: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
   latitude: {
     type: DataTypes.FLOAT,
     allowNull: true,
@@ -135,11 +149,23 @@ User.init({
   avatarUrl: {
     type: DataTypes.STRING,
     allowNull: true,
+  },
+  countryId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    defaultValue: DEFAULT_COUNTRY_ID,
   }
 }, {
   sequelize,
   modelName: 'User',
   freezeTableName: true, // Désactive la pluralisation automatique
+  indexes: [
+    {
+      unique: true,
+      fields: ['phone', 'role'],
+      name: 'unique_phone_per_role' // 🎯 Un numéro ne peut avoir qu'un seul compte 'usager'
+    }
+  ]
 });
 
 export default User;

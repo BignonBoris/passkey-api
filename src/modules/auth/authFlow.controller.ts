@@ -15,15 +15,15 @@ export async function checkPhone(req: Request, res: Response) {
   const data = await AuthFlowService.checkPhone(body.phone, body.role);
 
   res.status(200).json({
-    success: true,
-    message: "Phone check completed",
+    success: data.error ? false : true,
+    message: data.error ? data.error : "Vérification téléphonique terminée",
     data,
   });
 }
 
 export async function signIn(req: Request, res: Response) {
   const body = signInSchema.parse(req.body);
-  const result = await AuthFlowService.signIn(body.phone, body.password);
+  const result = await AuthFlowService.signIn(body.phone, body.role, body.password);
 
   if (!result.success) {
     return res.status(result.status).json({
@@ -55,6 +55,31 @@ export async function signUp(req: Request, res: Response) {
     message: result.message,
     data: result.data,
   });
+}
+
+// controllers/auth.controller.ts
+export async function resendOtp(req: Request, res: Response) {
+  try {
+    const { phone, role } = req.body;
+
+    if (!phone || !role) {
+      return res.status(400).json({
+        success: false,
+        message: "Le numéro de téléphone et le rôle sont requis."
+      });
+    }
+
+    const result = await AuthFlowService.resendOtp(phone, role);
+
+    return res.status(result.status).json({
+      success: result.success,
+      message: result.message,
+      data: result.data // Contient l'OTP seulement en DEV
+    });
+  } catch (error) {
+    console.error("Erreur Resend OTP:", error);
+    return res.status(500).json({ success: false, message: "Erreur interne du serveur." });
+  }
 }
 
 export async function forgotPassword(req: Request, res: Response) {

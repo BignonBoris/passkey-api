@@ -1,24 +1,29 @@
 import "dotenv/config";
-import { generateOTP } from "../../../utils/otp";
-import { UserService } from "../../../modules/users/user.service";
+import { generateOTP } from "@/utils/otp";
+import { UserService } from "@/modules/users/user.service";
 import bcrypt from "bcrypt";
-import { UserRepository } from "../../../repositories/user.repository";
-import User from '../../../models/user.model';
+import { UserRepository } from "@/repositories/user.repository";
+import User from '@/models/user.model';
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
 
 export class LoginService {
   static async login(phone: string, password: string, role: string) {
-    let user = await UserRepository.findByPhone(phone);
+    const normalizedPhone = await nomalizeCustomerPhone(phone);
+    let user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     if (user) {
+      if (user.accountStatus === "suspended") {
+        return { success: false, status: 403, message: "Votre compte est bloque. Contactez le support." };
+      }
       if (user.password) {
         const isValid = await bcrypt.compare(password, user.password!);
         if (!isValid) {
-          return { success: false, message: "Invalid password" };
+          return { success: false, message: "Mot de passe invalide" };
         }
       }
     } else {
       const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
 
-      user = await User.create({ phone, password: hashedPassword, role });
+      user = await User.create({ phone: normalizedPhone, password: hashedPassword, role });
 
     }
 
@@ -37,6 +42,13 @@ export class LoginService {
 
   static async sendOTP(phone: string, password: string) {
     const user = await UserService.getOrCreateUser(phone);
+    if (user.accountStatus === "suspended") {
+      return {
+        success: false,
+        status: 403,
+        message: "Votre compte est bloque. Contactez le support.",
+      };
+    }
 
     const otp = generateOTP();
     const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);

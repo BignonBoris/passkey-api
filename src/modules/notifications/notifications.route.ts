@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express from "express";
 import {
   listNotificationLogs,
   getNotificationLog,
@@ -6,10 +6,10 @@ import {
   updateNotificationLog,
   deleteNotificationLog,
 } from "./notifications.controller";
-import { authenticate, authorize } from "../../middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "../../constants/roles";
+import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "@/constants/roles";
 
-const router = Router();
+const router = express.Router();
 
 /**
  * @swagger

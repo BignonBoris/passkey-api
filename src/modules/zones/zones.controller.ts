@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import ServiceZone from "../../models/service-zone.model";
+import ServiceZone from "@/models/service-zone.model";
+import { resolveCountryId } from "@/services/country.service";
 
 export async function listZones(req: Request, res: Response) {
   try {
     const { status, name } = req.query as Record<string, string | undefined>;
-    const whereClause: any = {};
+    const whereClause: any = { countryId: await resolveCountryId(String(req.query.countryId || "")) };
     if (status) whereClause.status = status;
     if (name) whereClause.name = { [Op.like]: `%${name}%` };
 
@@ -33,7 +34,9 @@ export async function createZone(req: Request, res: Response) {
   try {
     const { name, city, status, polygon } = req.body || {};
     if (!name) return res.status(400).json({ success: false, message: "name is required" });
+    const countryId = await resolveCountryId(String(req.body?.countryId || ""));
     const row = await ServiceZone.create({
+      countryId,
       name,
       city: city || null,
       status: status || "ACTIVE",

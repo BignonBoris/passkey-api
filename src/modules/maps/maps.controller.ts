@@ -1,12 +1,171 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { findCountryByIdOrCode, resolveCountryFromCoordinates } from '@/services/country.service';
 
 dotenv.config();
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
+const GOOGLE_PLACE_DETAILS_URL =
+  'https://maps.googleapis.com/maps/api/place/details/json';
+
 interface DistanceRequest {
   origin: string;
   destination: string;
   vehicleType: 'moto' | 'car';
+}
+
+type GoogleGeocodeResult = {
+  formatted_address?: string;
+  place_id?: string;
+  address_components?: Array<{
+    long_name?: string;
+    short_name?: string;
+    types?: string[];
+  }>;
+  geometry?: {
+    location?: {
+      lat?: number;
+      lng?: number;
+    };
+  };
+};
+
+type ResolvedLocationData = {
+  placeName: string | null;
+  address: string;
+  placeId: string | null;
+  latitude: number;
+  longitude: number;
+};
+
+function hasGoogleMapsKey() {
+  return typeof GOOGLE_MAPS_API_KEY === 'string' && GOOGLE_MAPS_API_KEY.trim().length > 0;
+}
+
+function normalizeAddress(value?: string | null) {
+  const formatted = String(value || '').trim();
+  return formatted || 'Lieu selectionne';
+}
+
+function isPlusCodeLike(value?: string | null) {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (!normalized) return false;
+
+  // Exemples: "99H8+FF8", "7FG8V4Q6+X2"
+  return /^[23456789CFGHJMPQRVWX]{4,}\+[23456789CFGHJMPQRVWX]{2,}$/i.test(
+    normalized.replace(/\s+/g, '')
+  );
+}
+
+function isExplicitPlaceName(value?: string | null) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+  if (isPlusCodeLike(normalized)) return false;
+
+  const lowerValue = normalized.toLowerCase();
+  if (lowerValue === 'unnamed road' || lowerValue === 'unknown place') {
+    return false;
+  }
+
+  return true;
+}
+
+function extractFallbackPlaceName(result?: GoogleGeocodeResult | null) {
+  if (!result?.address_components?.length) return null;
+
+  const preferredTypes = [
+    'premise',
+    'subpremise',
+    'point_of_interest',
+    'establishment',
+    'street_address',
+    'route',
+    'neighborhood',
+    'sublocality',
+    'locality',
+  ];
+
+  for (const finalType of preferredTypes) {
+    const match = result.address_components.find((component) =>
+      Array.isArray(component.types) && component.types.includes(finalType)
+    );
+    const candidate = String(match?.long_name || '').trim();
+    if (isExplicitPlaceName(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+async function fetchPlaceName(placeId: string) {
+  if (!hasGoogleMapsKey()) return null;
+
+  const response = await axios.get(GOOGLE_PLACE_DETAILS_URL, {
+    params: {
+      place_id: placeId,
+      fields: 'name,place_id',
+      key: GOOGLE_MAPS_API_KEY,
+    },
+  });
+
+  if (response.data?.status !== 'OK') {
+    return null;
+  }
+
+  const name = String(response.data?.result?.name || '').trim();
+  return isExplicitPlaceName(name) ? name : null;
+}
+
+async function resolveGoogleLocation(lat: number, lng: number): Promise<ResolvedLocationData> {
+  if (!hasGoogleMapsKey()) {
+    throw new Error('GOOGLE_MAPS_API_KEY manquante');
+  }
+
+  const response = await axios.get(GOOGLE_GEOCODE_URL, {
+    params: {
+      latlng: `${lat},${lng}`,
+      key: GOOGLE_MAPS_API_KEY,
+    },
+  });
+
+  const results = Array.isArray(response.data?.results)
+    ? (response.data.results as GoogleGeocodeResult[])
+    : [];
+
+  const primaryResult = results[0];
+  const address = normalizeAddress(primaryResult?.formatted_address);
+  const placeId = String(primaryResult?.place_id || '').trim() || null;
+
+  let placeName: string | null = null;
+
+  if (placeId) {
+    try {
+      placeName = await fetchPlaceName(placeId);
+    } catch (error) {
+      console.error('Erreur Google Place Details:', error);
+    }
+  }
+
+  if (!placeName) {
+    placeName =
+      extractFallbackPlaceName(
+        results.find((item) =>
+          item.address_components?.some((component) =>
+            (component.types || []).some((type) =>
+              ['point_of_interest', 'establishment', 'premise'].includes(type)
+            )
+          )
+        ) || primaryResult
+      ) || null;
+  }
+
+  return {
+    placeName,
+    address,
+    placeId,
+    latitude: lat,
+    longitude: lng,
+  };
 }
 
 export const getRoute = async (req: Request, res: Response) => {
@@ -116,24 +275,55 @@ export const reverseGeocode = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Les coordonnees sont invalides" });
         }
 
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
-        const response = await axios.get(url);
-
-        if (response.data.status !== 'OK' || !Array.isArray(response.data.results) || response.data.results.length === 0) {
-            return res.json({
-                lat,
-                lng,
-                formattedAddress: "(nom inconnu)",
-            });
-        }
+        const resolved = await resolveGoogleLocation(lat, lng);
+        const countryResolution = await resolveCountryFromCoordinates(lat, lng);
 
         return res.json({
             lat,
             lng,
-            formattedAddress: response.data.results[0].formatted_address || "(nom inconnu)",
+            formattedAddress: resolved.placeName || resolved.address,
+            placeName: resolved.placeName,
+            address: resolved.address,
+            placeId: resolved.placeId,
+            latitude: resolved.latitude,
+            longitude: resolved.longitude,
+            country: countryResolution.country,
+            matchedByGps: countryResolution.matchedByGps,
         });
     } catch (error) {
         return res.status(500).json({ error: "Erreur de geocodage inverse" });
+    }
+};
+
+export const resolveLocation = async (req: Request, res: Response) => {
+    try {
+        const lat = Number(req.body?.lat);
+        const lng = Number(req.body?.lng);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({
+                success: false,
+                message: "Les coordonnees sont invalides",
+            });
+        }
+
+        const data = await resolveGoogleLocation(lat, lng);
+        const countryResolution = await resolveCountryFromCoordinates(lat, lng);
+
+        return res.json({
+            success: true,
+            data: {
+                ...data,
+                country: countryResolution.country,
+                matchedByGps: countryResolution.matchedByGps,
+            },
+        });
+    } catch (error) {
+        console.error("Erreur resolve-location:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la resolution du lieu",
+        });
     }
 };
 
@@ -143,7 +333,10 @@ export const getPlaceSuggestions = async (req: Request, res: Response) => {
         if (!input) return res.json([]);
 
         // On peut restreindre à un pays (ex: BJ pour le Bénin) pour plus de précision
-        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input as string)}&components=country:BJ&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        const countryLookup = String(req.query?.countryId || req.query?.countryCode || "").trim();
+        const country = await findCountryByIdOrCode(countryLookup || undefined);
+        const countryCode = String(country?.get("iso2") || "BJ").trim().toLowerCase();
+        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input as string)}&components=country:${countryCode}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
 
         const response = await axios.get(url);
         

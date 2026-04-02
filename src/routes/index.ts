@@ -1,8 +1,8 @@
 import { Router } from "express";
 import authRoutes from "../modules/auth/auth.route";
-import mapsRoutes from "../modules/maps/maps.route";
-import ordersRoutes from "../modules/order/order.routes";
-import usersRoutes from "../modules/users/user.route";
+import mapsRoutes from '../modules/maps/maps.route';
+import ordersRoutes from '../modules/order/order.routes';
+import usersRoutes from '../modules/users/user.route';
 import dashboardRoutes from "../modules/dashboard/dashboard.route";
 import kycRoutes from "../modules/kyc/kyc.route";
 import driverDocumentsRoutes from "../modules/driver-documents/driver-documents.route";
@@ -19,8 +19,10 @@ import faqsRoutes from "../modules/faqs/faqs.route";
 import chatRoutes from "../modules/chat/chat.route";
 import settingsRoutes from "../modules/settings/settings.route";
 import addressesRoutes from "../modules/addresses/addresses.route";
-import devRoutes from "../modules/dev/reset.route";
 import paymentsRoutes from "../modules/payments/payments.route";
+import foodHomeRoutes from "../modules/food-home/food-home.route";
+import vehicleTypesRoutes from "../modules/vehicle-types/vehicle-types.route";
+import countriesRoutes from "../modules/countries/countries.route";
 
 const router = Router();
 
@@ -29,7 +31,6 @@ router.use('/maps', mapsRoutes);
 router.use('/orders', ordersRoutes);
 router.use('/users', usersRoutes);
 router.use("/dashboard", dashboardRoutes);
-router.use("/dashboar", dashboardRoutes);
 router.use("/kyc", kycRoutes);
 router.use("/driver-documents", driverDocumentsRoutes);
 router.use("/driver-vehicles", driverVehiclesRoutes);
@@ -45,8 +46,9 @@ router.use("/faqs", faqsRoutes);
 router.use("/chat", chatRoutes);
 router.use("/settings", settingsRoutes);
 router.use("/addresses", addressesRoutes);
-router.use("/dev", devRoutes);
 router.use("/payments", paymentsRoutes);
+router.use("/food-home", foodHomeRoutes);
+router.use("/vehicle-types", vehicleTypesRoutes);
+router.use("/countries", countriesRoutes);
 
 export default router;
-

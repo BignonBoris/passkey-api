@@ -1,8 +1,10 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 class ServiceZone extends Model {
   public id!: string;
+  public countryId!: string;
   public name!: string;
   public city?: string | null;
   public status!: "ACTIVE" | "INACTIVE";
@@ -15,6 +17,11 @@ ServiceZone.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    countryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      defaultValue: DEFAULT_COUNTRY_ID,
     },
     name: {
       type: DataTypes.STRING,

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import KycRequest from "../../models/kyc-request.model";
-import User from "../../models/user.model";
+import KycRequest from "@/models/kyc-request.model";
+import User from "@/models/user.model";
 
 export async function listKycRequests(req: Request, res: Response) {
   try {

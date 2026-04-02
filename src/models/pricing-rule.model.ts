@@ -1,5 +1,6 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 export enum PricingRuleType {
   WAITING = "WAITING",
@@ -18,6 +19,7 @@ export enum PricingAdjustmentType {
 
 class PricingRule extends Model {
   public id!: string;
+  public countryId!: string;
   public ruleType!: PricingRuleType;
   public name!: string;
   public daysOfWeek!: string | null;
@@ -39,6 +41,11 @@ PricingRule.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    countryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      defaultValue: DEFAULT_COUNTRY_ID,
     },
     ruleType: {
       type: DataTypes.ENUM(

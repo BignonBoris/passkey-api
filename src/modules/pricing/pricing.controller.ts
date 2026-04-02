@@ -1,13 +1,14 @@
 import { Request, Response } from "express";
-import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
-import { calculateDeliveryPricing } from "../../services/pricing.service";
+import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
+import { calculateDeliveryPricing } from "@/services/pricing.service";
 import {
   listPricingRules,
   upsertPricingRule,
   removePricingRule,
   PricingRulePayload,
-} from "../../services/config.service";
-import PricingRule from "../../models/pricing-rule.model";
+} from "@/services/config.service";
+import PricingRule from "@/models/pricing-rule.model";
+import { resolveCountryId } from "@/services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);
@@ -17,7 +18,8 @@ function parseNumber(value: unknown, fallback = 0) {
 export async function listPricingConfigs(req: Request, res: Response) {
   try {
     const { vehicleType } = req.query as Record<string, string | undefined>;
-    const whereClause: Record<string, unknown> = {};
+    const countryId = await resolveCountryId(String(req.query.countryId || ""));
+    const whereClause: Record<string, unknown> = { countryId };
     if (vehicleType) whereClause.vehicleType = vehicleType;
 
     const rows = await VehiclePricingConfig.findAll({
@@ -34,6 +36,7 @@ export async function createOrUpdatePricingConfig(req: Request, res: Response) {
   try {
     const {
       id,
+      countryId: rawCountryId,
       vehicleType,
       baseFare,
       perKmRate,
@@ -47,6 +50,7 @@ export async function createOrUpdatePricingConfig(req: Request, res: Response) {
     }
 
     const payload = {
+      countryId: await resolveCountryId(String(rawCountryId || "")),
       vehicleType: String(vehicleType).trim(),
       baseFare: parseNumber(baseFare, 0),
       perKmRate: parseNumber(perKmRate, 0),
@@ -57,7 +61,9 @@ export async function createOrUpdatePricingConfig(req: Request, res: Response) {
 
     let row = id ? await VehiclePricingConfig.findByPk(id) : null;
     if (!row) {
-      row = await VehiclePricingConfig.findOne({ where: { vehicleType: payload.vehicleType } });
+      row = await VehiclePricingConfig.findOne({
+        where: { vehicleType: payload.vehicleType, countryId: payload.countryId },
+      });
     }
 
     if (row) {
@@ -107,6 +113,7 @@ export async function deletePricingConfig(req: Request, res: Response) {
 export async function calculatePricing(req: Request, res: Response) {
   try {
     const { vehicleType, configId, distanceKm, durationMinutes, extras, pickupTimestamp } = req.body || {};
+    const countryId = await resolveCountryId(String(req.body?.countryId || req.query.countryId || ""));
     const distance = parseNumber(distanceKm, 0);
     const duration = parseNumber(durationMinutes, 0);
     const extrasAmount = parseNumber(extras, 0);
@@ -117,6 +124,7 @@ export async function calculatePricing(req: Request, res: Response) {
 
     const calculation = await calculateDeliveryPricing({
       vehicleType: vehicleType || "",
+      countryId,
       distanceKm: distance,
       durationMinutes: duration,
       extras: extrasAmount,
@@ -139,7 +147,8 @@ export async function listPricingRulesController(req: Request, res: Response) {
   try {
     const rawType = req.query.type;
     const type = typeof rawType === "string" ? rawType : undefined;
-    const rows = await listPricingRules(type as any);
+    const countryId = await resolveCountryId(String(req.query.countryId || ""));
+    const rows = await listPricingRules(type as any, countryId);
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to list pricing rules" });
@@ -148,7 +157,10 @@ export async function listPricingRulesController(req: Request, res: Response) {
 
 export async function createPricingRuleController(req: Request, res: Response) {
   try {
-    const payload = req.body as PricingRulePayload;
+    const payload = {
+      ...(req.body as PricingRulePayload),
+      countryId: await resolveCountryId(String(req.body?.countryId || "")),
+    };
     const row = await upsertPricingRule(payload);
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
@@ -158,7 +170,10 @@ export async function createPricingRuleController(req: Request, res: Response) {
 
 export async function updatePricingRuleController(req: Request, res: Response) {
   try {
-    const payload = req.body as PricingRulePayload;
+    const payload = {
+      ...(req.body as PricingRulePayload),
+      countryId: await resolveCountryId(String(req.body?.countryId || "")),
+    };
     const row = await upsertPricingRule({ ...payload, id: req.params.id });
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {

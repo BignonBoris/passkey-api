@@ -2,11 +2,12 @@ import { z } from "zod";
 
 export const checkPhoneSchema = z.object({
   phone: z.string().min(8),
-  role: z.enum(["usager", "livreur", "admin", "sous-admin"]),
+  role: z.enum(["usager", "livreur", "admin", "sous-admin", "restaurant"]),
 });
 
 export const signInSchema = z.object({
   phone: z.string().min(8),
+  role: z.string(),
   password: z.string().min(6),
 });
 
@@ -36,5 +37,5 @@ export const adminSignUpSchema = z.object({
   phone: z.string().min(8),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(["admin", "sous-admin"]).default("admin"),
+  role: z.enum(["admin", "sous-admin", "restaurant"]).default("admin"),
 });

@@ -1,36 +1,108 @@
 import { Request, Response } from "express";
 import AppSettings, {
   SettingsSection,
+  SettingsContent,
+  SettingsEntryObject,
   normalizeSettingsContent,
-} from "../../models/app-settings.model";
+} from "@/models/app-settings.model";
 
-const PREDEFINED_SECTIONS: SettingsSection[] = ["contact", "about"];
+const PREDEFINED_SECTIONS: SettingsSection[] = ["contact", "about", "operations"];
 
-type DynamicItems = Record<string, string>[];
+type DynamicItem = {
+  key: string;
+  value: string;
+  icon?: string;
+};
+type DynamicItems = DynamicItem[];
 
-function sanitizeSectionInput(input: unknown): Record<string, string> {
-  const normalized: Record<string, string> = {};
+function normalizeDynamicValue(rawValue: unknown): SettingsEntryObject {
+  if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)) {
+    const item = rawValue as Record<string, unknown>;
+    const value = String(item.value ?? "").trim();
+    const icon = String(item.icon ?? item.iconKey ?? "").trim();
+    return icon ? { value, icon } : { value };
+  }
+
+  return { value: String(rawValue ?? "").trim() };
+}
+
+function sanitizeDynamicSectionInput(input: unknown): SettingsContent {
+  const normalized: SettingsContent = {};
 
   if (!Array.isArray(input)) return normalized;
 
   for (const item of input) {
     if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-    const entries = Object.entries(item as Record<string, unknown>);
-    if (entries.length === 0) continue;
+    const record = item as Record<string, unknown>;
+    const explicitKey = String(record.key ?? "").trim();
 
-    const [key, rawValue] = entries[0];
-    const cleanKey = String(key ?? "").trim();
+    let cleanKey = explicitKey;
+    let entryValue: SettingsEntryObject;
+
+    if (cleanKey) {
+      entryValue = {
+        value: String(record.value ?? "").trim(),
+      };
+      const icon = String(record.icon ?? record.iconKey ?? "").trim();
+      if (icon) entryValue.icon = icon;
+    } else {
+      const entries = Object.entries(record);
+      if (entries.length === 0) continue;
+      const [legacyKey, legacyValue] = entries[0];
+      cleanKey = String(legacyKey ?? "").trim();
+      entryValue = normalizeDynamicValue(legacyValue);
+    }
+
     if (!cleanKey) continue;
 
+    normalized[cleanKey] = entryValue;
+  }
+
+  return normalized;
+}
+
+function sanitizeOperationsInput(input: unknown): SettingsContent {
+  const normalized: SettingsContent = {};
+  if (!Array.isArray(input)) return normalized;
+
+  for (const item of input) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const explicitKey = String(record.key ?? "").trim();
+
+    if (explicitKey) {
+      normalized[explicitKey] = String(record.value ?? "").trim();
+      continue;
+    }
+
+    const entries = Object.entries(record);
+    if (entries.length === 0) continue;
+    const [legacyKey, rawValue] = entries[0];
+    const cleanKey = String(legacyKey ?? "").trim();
+    if (!cleanKey) continue;
     normalized[cleanKey] = String(rawValue ?? "").trim();
   }
 
   return normalized;
 }
 
-function toDynamicItems(sectionData: Record<string, string> | null | undefined): DynamicItems {
+function toDynamicItems(sectionData: SettingsContent | null | undefined): DynamicItems {
   if (!sectionData || typeof sectionData !== "object") return [];
-  return Object.entries(sectionData).map(([key, value]) => ({ [key]: String(value ?? "") }));
+  return Object.entries(sectionData).map(([key, value]) => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const item = value as SettingsEntryObject;
+      return {
+        key,
+        value: String(item.value ?? ""),
+        ...(item.icon ? { icon: String(item.icon) } : {}),
+      };
+    }
+
+    return {
+      key,
+      value: String(value ?? ""),
+    };
+  });
 }
 
 async function buildSettingsResponse() {
@@ -38,9 +110,10 @@ async function buildSettingsResponse() {
     where: { section: PREDEFINED_SECTIONS },
   });
 
-  const map: Record<SettingsSection, Record<string, string>> = {
+  const map: Record<SettingsSection, SettingsContent> = {
     contact: {},
     about: {},
+    operations: {},
   };
 
   for (const row of rows) {
@@ -51,6 +124,7 @@ async function buildSettingsResponse() {
   return {
     contact: toDynamicItems(map.contact),
     about: toDynamicItems(map.about),
+    operations: toDynamicItems(map.operations),
   };
 }
 
@@ -68,22 +142,27 @@ export async function updateSettings(req: Request, res: Response) {
     const payload = req.body || {};
     const hasContact = Object.prototype.hasOwnProperty.call(payload, "contact");
     const hasAbout = Object.prototype.hasOwnProperty.call(payload, "about");
+    const hasOperations = Object.prototype.hasOwnProperty.call(payload, "operations");
 
-    if (!hasContact && !hasAbout) {
+    if (!hasContact && !hasAbout && !hasOperations) {
       return res.status(400).json({
         success: false,
-        message: "At least one section is required: contact or about",
+        message: "At least one section is required: contact, about or operations",
       });
     }
 
-    const updates: Array<{ section: SettingsSection; content: Record<string, string> }> = [];
+    const updates: Array<{ section: SettingsSection; content: SettingsContent }> = [];
 
     if (hasContact) {
-      updates.push({ section: "contact", content: sanitizeSectionInput(payload.contact) });
+      updates.push({ section: "contact", content: sanitizeDynamicSectionInput(payload.contact) });
     }
 
     if (hasAbout) {
-      updates.push({ section: "about", content: sanitizeSectionInput(payload.about) });
+      updates.push({ section: "about", content: sanitizeDynamicSectionInput(payload.about) });
+    }
+
+    if (hasOperations) {
+      updates.push({ section: "operations", content: sanitizeOperationsInput(payload.operations) });
     }
 
     for (const update of updates) {

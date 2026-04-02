@@ -11,7 +11,9 @@ import routes from "./routes";
 import { swaggerSpec } from "./docs/swagger";
 import { errorHandler } from "./middlewares/errorHandler";
 import { emitUserLocationUpdated } from "./realtime/location.events";
+import { setSocketServer } from "./realtime/socket.instance";
 import { handleFedaPayWebhook } from "./modules/payments/payments.controller";
+import { resolveCountryFromCoordinates } from "./services/country.service";
 
 const app = express();
 
@@ -28,6 +30,8 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
+
+setSocketServer(io);
 
 io.on("connection", (socket) => {
   console.log("Un utilisateur connecte :", socket.id);
@@ -63,6 +67,7 @@ io.on("connection", (socket) => {
 
   socket.on("join_driver_room", () => {
     socket.join("drivers");
+    socket.join("role_courier");
     console.log(`Socket ${socket.id} a rejoint la salle des livreurs`);
   });
 
@@ -97,6 +102,7 @@ io.on("connection", (socket) => {
     };
 
     io.to(`user_${driverId}`).emit("driver:incoming_call", eventPayload);
+    io.to(`user_${driverId}`).emit("new_delivery_request", eventPayload);
     io.to(`user_${callerId}`).emit("driver:call_status", {
       status: "sent",
       driverId,
@@ -128,8 +134,10 @@ io.on("connection", (socket) => {
     }
 
     const locationUpdatedAt = new Date();
+    const countryResolution = await resolveCountryFromCoordinates(latitude, longitude);
     await User.update(
       {
+        countryId: String(countryResolution.country.get("id") || ""),
         latitude,
         longitude,
         locationUpdatedAt,

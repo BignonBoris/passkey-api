@@ -1,8 +1,10 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 class DriverRevenueConfig extends Model {
   public id!: string;
+  public countryId!: string;
   public vehicleType!: string;
   public baseFare!: number;
   public perKmRate!: number;
@@ -18,10 +20,14 @@ DriverRevenueConfig.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+    countryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      defaultValue: DEFAULT_COUNTRY_ID,
+    },
     vehicleType: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
     },
     baseFare: {
       type: DataTypes.FLOAT,
@@ -54,6 +60,13 @@ DriverRevenueConfig.init(
     modelName: "DriverRevenueConfig",
     tableName: "DriverRevenueConfig",
     freezeTableName: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ["countryId", "vehicleType"],
+        name: "driver_revenue_country_vehicle_unique",
+      },
+    ],
   }
 );
 

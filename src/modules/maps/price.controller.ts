@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
-import VehiclePricingConfig from '../../models/vehicle-pricing-config.model';
+import VehiclePricingConfig from '@/models/vehicle-pricing-config.model';
+import VehicleType from '@/models/vehicle-type.model';
 import { getRouteDetails } from './maps.service';
+import { resolveCountryFromCoordinates } from '@/services/country.service';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
   moto: 0.8,
@@ -26,17 +28,42 @@ function toVehicleLabel(vehicleType: string) {
 
 export const calculateTrip = async (req: Request, res: Response) => {
   const { pickup, delivery } = req.body;
+  const resolvedCountry = await resolveCountryFromCoordinates(Number(pickup?.lat), Number(pickup?.lng));
+  const countryId = String(resolvedCountry.country.get("id") || "");
 
   const routeData = await getRouteDetails(pickup, delivery);
   if (!routeData) {
     return res.status(400).json({ message: "Impossible de calculer l'itineraire" });
   }
 
-  const configs = await VehiclePricingConfig.findAll({
-    order: [['vehicleType', 'ASC']],
-  });
+  const [configs, vehicleTypes] = await Promise.all([
+    VehiclePricingConfig.findAll({
+      where: { countryId },
+      order: [['vehicleType', 'ASC']],
+    }),
+    VehicleType.findAll({
+      where: { isActive: true, countryId },
+      order: [['sortOrder', 'ASC'], ['name', 'ASC']],
+    }),
+  ]);
 
-  if (!configs.length) {
+  const configByType = new Map(
+    configs.map((config) => [String(config.vehicleType || '').trim().toLowerCase(), config])
+  );
+
+  const sourceRows = vehicleTypes.length
+    ? vehicleTypes.map((item) => ({
+        code: String(item.get('code') || '').trim().toLowerCase(),
+        name: String(item.get('name') || '').trim(),
+        iconKey: String(item.get('iconKey') || 'two_wheeler_rounded').trim(),
+      }))
+    : configs.map((config) => ({
+        code: String(config.vehicleType || '').trim().toLowerCase(),
+        name: toVehicleLabel(String(config.vehicleType || '').trim().toLowerCase()),
+        iconKey: 'two_wheeler_rounded',
+      }));
+
+  if (!sourceRows.length) {
     return res.status(404).json({
       success: false,
       message: 'Aucune configuration tarifaire disponible',
@@ -45,9 +72,11 @@ export const calculateTrip = async (req: Request, res: Response) => {
 
   const distanceKm = routeData.distanceValue / 1000;
 
-  const options = configs
-    .map((config) => {
-      const vehicleType = String(config.vehicleType || '').trim().toLowerCase();
+  const options = sourceRows
+    .map((source) => {
+      const vehicleType = source.code;
+      const config = configByType.get(vehicleType);
+      if (!config || !vehicleType) return null;
       const baseFare = Number(config.baseFare);
       const perKmRate = Number(config.perKmRate);
       const perMinuteRate = Number(config.perMinuteRate);
@@ -79,11 +108,12 @@ export const calculateTrip = async (req: Request, res: Response) => {
 
       return {
         id: vehicleType,
-        name: toVehicleLabel(vehicleType),
+        name: source.name || toVehicleLabel(vehicleType),
         price,
         distance: routeData.distanceText,
         duration: `${Math.ceil(adjustedDurationMinutes)} min`,
         image: `${vehicleType}.png`,
+        iconKey: source.iconKey || 'two_wheeler_rounded',
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);

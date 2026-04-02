@@ -9,14 +9,16 @@ import {
   recoverPassword,
   signIn,
   signUp,
+  resendOtp,
 } from "./authFlow.controller";
-import { authenticate, authorize } from "../../middlewares/auth.middleware";
+import { authenticate, authorize } from "@/middlewares/auth.middleware";
 
 const router = Router();
 
 router.use("/login", loginRoutes);
 router.use("/verify-otp", verifyOtpRoutes);
 router.post("/check-phone", checkPhone);
+router.post("/resend-otp", resendOtp);
 router.post("/sign-in", signIn);
 router.post("/sign-up", signUp);
 router.post("/register", signUp);

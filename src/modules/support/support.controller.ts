@@ -1,11 +1,12 @@
 import { Response } from "express";
 import { Op } from "sequelize";
-import SupportTicket from "../../models/support-ticket.model";
-import SupportTicketMessage from "../../models/support-ticket-message.model";
-import User from "../../models/user.model";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import { PRIVILEGED_ROLES } from "../../constants/roles";
-import { sendPushNotification } from "../../services/notification.service";
+import SupportTicket from "@/models/support-ticket.model";
+import SupportTicketMessage from "@/models/support-ticket-message.model";
+import SupportTicketCategory from "@/models/support-ticket-category.model";
+import User from "@/models/user.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import { PRIVILEGED_ROLES } from "@/constants/roles";
+import { sendPushNotification } from "@/services/notification.service";
 
 const ARCHIVED_CATEGORY_PREFIX = "ARCHIVED|";
 
@@ -45,21 +46,21 @@ function mapTicketForResponse(ticket: any) {
   const archived = isArchivedCategory(rawCategory);
   const messages = Array.isArray(ticket.messages)
     ? ticket.messages.map((msg: any) => ({
-      id: msg.id,
-      ticketId: msg.ticketId,
-      senderId: msg.senderId,
-      senderRole: msg.senderRole,
-      message: msg.message,
-      createdAt: msg.createdAt,
-      sender: msg.sender
-        ? {
-          id: msg.sender.id,
-          name: msg.sender.name,
-          phone: msg.sender.phone,
-          role: msg.sender.role,
-        }
-        : null,
-    }))
+        id: msg.id,
+        ticketId: msg.ticketId,
+        senderId: msg.senderId,
+        senderRole: msg.senderRole,
+        message: msg.message,
+        createdAt: msg.createdAt,
+        sender: msg.sender
+          ? {
+              id: msg.sender.id,
+              name: msg.sender.name,
+              phone: msg.sender.phone,
+              role: msg.sender.role,
+            }
+          : null,
+      }))
     : [];
 
   return {
@@ -77,22 +78,44 @@ function mapTicketForResponse(ticket: any) {
     lastMessageAt: ticket.lastMessageAt,
     requester: user
       ? {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-      }
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          role: user.role,
+        }
       : null,
     assignedAdmin: assignedAdmin
       ? {
-        id: assignedAdmin.id,
-        name: assignedAdmin.name,
-        phone: assignedAdmin.phone,
-        role: assignedAdmin.role,
-      }
+          id: assignedAdmin.id,
+          name: assignedAdmin.name,
+          phone: assignedAdmin.phone,
+          role: assignedAdmin.role,
+        }
       : null,
     messages,
   };
+}
+
+function mapCategoryForResponse(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    isActive: Boolean(row.isActive),
+    sortOrder: Number(row.sortOrder ?? 0),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function resolveActiveCategoryName(category: unknown) {
+  const raw = String(category || "").trim();
+  if (!raw) return null;
+
+  const row = await SupportTicketCategory.findOne({
+    where: { name: raw, isActive: true },
+  });
+  return row ? String(row.get("name")) : null;
 }
 
 export async function listSupportTickets(req: AuthenticatedRequest, res: Response) {
@@ -205,12 +228,16 @@ export async function createSupportTicket(req: AuthenticatedRequest, res: Respon
     if (!initialMessage) {
       return res.status(400).json({ success: false, message: "Message is required" });
     }
+    const normalizedCategory = await resolveActiveCategoryName(category);
+    if (category !== undefined && String(category || "").trim() && !normalizedCategory) {
+      return res.status(400).json({ success: false, message: "Categorie de ticket invalide." });
+    }
 
     const row = await SupportTicket.create({
       userId: auth.id,
       orderId: orderId || null,
       priority: priority || "MEDIUM",
-      category: category || null,
+      category: normalizedCategory,
       subject: subject || null,
       status: "OPEN",
       lastMessageAt: new Date(),
@@ -254,13 +281,133 @@ export async function updateSupportTicket(req: AuthenticatedRequest, res: Respon
 
     if (status) row.set("status", status);
     if (priority) row.set("priority", priority);
-    if (category !== undefined) row.set("category", category);
+    if (category !== undefined) {
+      if (category === null || String(category).trim() === "") {
+        row.set("category", null);
+      } else {
+        const normalizedCategory = await resolveActiveCategoryName(category);
+        if (!normalizedCategory) {
+          return res.status(400).json({ success: false, message: "Categorie de ticket invalide." });
+        }
+        row.set("category", normalizedCategory);
+      }
+    }
     if (assignedTo !== undefined) row.set("assignedTo", assignedTo);
 
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to update support ticket" });
+  }
+}
+
+export async function listSupportTicketCategories(req: AuthenticatedRequest, res: Response) {
+  try {
+    const auth = ensureAuth(req, res);
+    if (!auth) return;
+    const includeInactive = isPrivileged(auth.role) && String(req.query.includeInactive || "") === "true";
+    const rows = await SupportTicketCategory.findAll({
+      where: includeInactive ? undefined : { isActive: true },
+      order: [["sortOrder", "ASC"], ["name", "ASC"]],
+    });
+    return res.status(200).json({ success: true, data: rows.map((row) => mapCategoryForResponse(row)) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to list support ticket categories" });
+  }
+}
+
+export async function createSupportTicketCategory(req: AuthenticatedRequest, res: Response) {
+  try {
+    const auth = ensureAuth(req, res);
+    if (!auth) return;
+    if (!isPrivileged(auth.role)) {
+      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+    }
+
+    const name = String(req.body?.name || "").trim();
+    const description = String(req.body?.description || "").trim();
+    const sortOrder = Number(req.body?.sortOrder ?? 0);
+    if (!name) {
+      return res.status(400).json({ success: false, message: "Le nom de la categorie est requis." });
+    }
+
+    const existing = await SupportTicketCategory.findOne({ where: { name } });
+    if (existing) {
+      return res.status(409).json({ success: false, message: "Cette categorie existe deja." });
+    }
+
+    const row = await SupportTicketCategory.create({
+      name,
+      description: description || null,
+      sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+      isActive: true,
+    });
+    return res.status(201).json({ success: true, data: mapCategoryForResponse(row) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to create support ticket category" });
+  }
+}
+
+export async function updateSupportTicketCategory(req: AuthenticatedRequest, res: Response) {
+  try {
+    const auth = ensureAuth(req, res);
+    if (!auth) return;
+    if (!isPrivileged(auth.role)) {
+      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+    }
+
+    const row = await SupportTicketCategory.findByPk(req.params.id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Categorie introuvable." });
+    }
+
+    const name = req.body?.name !== undefined ? String(req.body?.name || "").trim() : null;
+    const description = req.body?.description !== undefined ? String(req.body?.description || "").trim() : null;
+    const sortOrder = req.body?.sortOrder !== undefined ? Number(req.body?.sortOrder) : null;
+    const isActive = req.body?.isActive;
+
+    if (name !== null) {
+      if (!name) {
+        return res.status(400).json({ success: false, message: "Le nom de la categorie est requis." });
+      }
+      const duplicate = await SupportTicketCategory.findOne({
+        where: { name, id: { [Op.ne]: req.params.id } },
+      });
+      if (duplicate) {
+        return res.status(409).json({ success: false, message: "Cette categorie existe deja." });
+      }
+      row.set("name", name);
+    }
+
+    if (description !== null) row.set("description", description || null);
+    if (sortOrder !== null && Number.isFinite(sortOrder)) row.set("sortOrder", sortOrder);
+    if (typeof isActive === "boolean") row.set("isActive", isActive);
+
+    await row.save();
+    return res.status(200).json({ success: true, data: mapCategoryForResponse(row) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to update support ticket category" });
+  }
+}
+
+export async function deleteSupportTicketCategory(req: AuthenticatedRequest, res: Response) {
+  try {
+    const auth = ensureAuth(req, res);
+    if (!auth) return;
+    if (!isPrivileged(auth.role)) {
+      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+    }
+
+    const row = await SupportTicketCategory.findByPk(req.params.id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Categorie introuvable." });
+    }
+
+    row.set("isActive", false);
+    await row.save();
+    return res.status(200).json({ success: true, message: "Categorie supprimee." });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Failed to delete support ticket category" });
   }
 }
 
@@ -352,6 +499,21 @@ export async function postSupportTicketMessage(req: AuthenticatedRequest, res: R
             ticketId,
             senderName: String((sender as any)?.name || "Support"),
             senderRole: String((sender as any)?.role || "admin"),
+            title: "Support PassKey",
+            message: messageText,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            room: `user_${String(ticket.get("userId") || "").trim()}`,
+            event: "support:reply",
+            payload: {
+              type: "SUPPORT_REPLY",
+              ticketId,
+              senderName: String((sender as any)?.name || "Support"),
+              senderRole: String((sender as any)?.role || "admin"),
+              title: "Support PassKey",
+              message: messageText,
+            },
           }
         );
       }
@@ -372,11 +534,11 @@ export async function postSupportTicketMessage(req: AuthenticatedRequest, res: R
         createdAt: created?.get("createdAt"),
         sender: (created as any)?.sender
           ? {
-            id: (created as any).sender.id,
-            name: (created as any).sender.name,
-            phone: (created as any).sender.phone,
-            role: (created as any).sender.role,
-          }
+              id: (created as any).sender.id,
+              name: (created as any).sender.name,
+              phone: (created as any).sender.phone,
+              role: (created as any).sender.role,
+            }
           : null,
       },
     });

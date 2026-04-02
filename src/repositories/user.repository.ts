@@ -1,10 +1,9 @@
-import User from '../models/user.model';
+import User from '@/models/user.model';
 
 export class UserRepository {
-  static findByPhone(phone: string) {
-
+  static findOne(where: any) {
     return User.findOne({
-      where: { phone },
+      where,
       attributes: [
         "id",
         "phone",
@@ -18,10 +17,21 @@ export class UserRepository {
         "updatedAt",
         "password",
         "otpCode",
-        "otpExpiresAt"
+        "otpExpiresAt",
+        "accountStatus" // N'oublie pas d'ajouter ce champ si tu l'utilises pour les suspensions
       ],
       raw: true
     });
+  }
+
+  // Tu peux garder findByPhone pour la compatibilité, en appelant findOne
+  static findByPhone(phone: string) {
+    return this.findOne({ phone });
+  }
+
+  // Nouvelle méthode spécifique pour ton besoin actuel
+  static findByPhoneAndRole(phone: string, role: string) {
+    return this.findOne({ phone, role });
   }
 
   static findByEmail(email: string) {

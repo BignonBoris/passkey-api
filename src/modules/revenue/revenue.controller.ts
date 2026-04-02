@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import DriverRevenueConfig from "../../models/driver-revenue-config.model";
-import { calculateDriverRevenue, RevenueCalculationInput } from "../../services/revenue.service";
+import DriverRevenueConfig from "@/models/driver-revenue-config.model";
+import { calculateDriverRevenue, RevenueCalculationInput } from "@/services/revenue.service";
+import { resolveCountryId } from "@/services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);
@@ -10,7 +11,8 @@ function parseNumber(value: unknown, fallback = 0) {
 export async function listRevenueConfigs(req: Request, res: Response) {
   try {
     const { vehicleType } = req.query as Record<string, string | undefined>;
-    const whereClause: Record<string, unknown> = {};
+    const countryId = await resolveCountryId(String(req.query.countryId || ""));
+    const whereClause: Record<string, unknown> = { countryId };
     if (vehicleType) whereClause.vehicleType = vehicleType;
 
     const configs = await DriverRevenueConfig.findAll({
@@ -43,6 +45,7 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
   try {
     const {
       id,
+      countryId: rawCountryId,
       vehicleType,
       baseFare,
       perKmRate,
@@ -58,6 +61,7 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
     }
 
     const payload = {
+      countryId: await resolveCountryId(String(rawCountryId || "")),
       vehicleType,
       baseFare: parseNumber(baseFare),
       perKmRate: parseNumber(perKmRate),
@@ -68,7 +72,7 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
 
     let config = id ? await DriverRevenueConfig.findByPk(id) : null;
     if (!config) {
-      config = await DriverRevenueConfig.findOne({ where: { vehicleType } });
+      config = await DriverRevenueConfig.findOne({ where: { vehicleType, countryId: payload.countryId } });
     }
 
     if (config) {
@@ -135,6 +139,7 @@ export async function calculateRevenue(req: Request, res: Response) {
       extras,
     } = req.body || {};
 
+    const countryId = await resolveCountryId(String(req.body?.countryId || req.query.countryId || ""));
     const parsedDistance = parseNumber(distanceKm);
     const parsedDuration = parseNumber(durationMinutes);
     if (parsedDistance <= 0 && parsedDuration <= 0) {
@@ -148,8 +153,8 @@ export async function calculateRevenue(req: Request, res: Response) {
     const revenueConfig = configId
       ? await DriverRevenueConfig.findByPk(configId)
       : await DriverRevenueConfig.findOne({
-        where: vehicleType ? { vehicleType } : undefined,
-      });
+          where: vehicleType ? { vehicleType, countryId } : { countryId },
+        });
 
     if (!revenueConfig) {
       return res.status(404).json({ success: false, message: "Revenue config not found" });
