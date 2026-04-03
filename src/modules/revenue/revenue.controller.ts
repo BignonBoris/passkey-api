@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import DriverRevenueConfig from "../../models/driver-revenue-config.model";
-import { calculateDriverRevenue, RevenueCalculationInput } from "../../services/revenue.service";
-import { resolveCountryId } from "../../services/country.service";
+import DriverRevenueConfig from "@/models/driver-revenue-config.model";
+import { calculateDriverRevenue, RevenueCalculationInput } from "@/services/revenue.service";
+import { resolveCountryId } from "@/services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);

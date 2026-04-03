@@ -27,8 +27,8 @@ import {
   updateManagedProduct,
   updateManagedRestaurant,
 } from "./food-home.controller";
-import { authenticate } from "../../middlewares/auth.middleware";
-import { foodMediaUpload } from "../../middlewares/upload.middleware";
+import { authenticate } from "@/middlewares/auth.middleware";
+import { foodMediaUpload } from "@/middlewares/upload.middleware";
 
 const router = express.Router();
 

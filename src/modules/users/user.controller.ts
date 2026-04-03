@@ -1,14 +1,15 @@
 import { Request, Response } from "express";
 import { UserService } from "./user.service";
 import { UserRepository } from "./user.repository";
-import User from "../../models/user.model";
+import User from "@/models/user.model";
 import { Op } from "sequelize";
 import bcrypt from "bcrypt";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import { StatusHistoryRepository } from "../../repositories/status-history.repository";
-import { sendPushNotification } from "../../services/notification.service";
-import { emitUserLocationUpdated } from "../../realtime/location.events";
-import { resolveCountryFromCoordinates } from "../../services/country.service";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import { StatusHistoryRepository } from "@/repositories/status-history.repository";
+import { sendPushNotification } from "@/services/notification.service";
+import { emitUserLocationUpdated } from "@/realtime/location.events";
+import { resolveCountryFromCoordinates } from "@/services/country.service";
+import Country from "@/models/country.model";
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -194,6 +195,25 @@ export const updateProfile = async (req: Request, res: Response) => {
     }
     const dataToUpdate = req.body;
 
+    if (dataToUpdate.email) {
+      const normalizedEmail = String(dataToUpdate.email).trim().toLowerCase();
+      if (normalizedEmail) {
+        const existingEmail = await User.findOne({
+          where: {
+            email: normalizedEmail,
+            id: { [Op.ne]: userId },
+          },
+        });
+        if (existingEmail) {
+          return res.status(409).json({
+            success: false,
+            message: "Cet email est déjà utilisé.",
+          });
+        }
+        dataToUpdate.email = normalizedEmail;
+      }
+    }
+
     const updatedUser = await UserRepository.updateUser({
       id: userId,
       ...dataToUpdate,
@@ -211,13 +231,15 @@ export const updateProfile = async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({
+      success: true,
       message: "Mise à jour réussie",
       user: updatedUser,
     });
   } catch (error: any) {
-    return res
-      .status(500)
-      .json({ error: error?.message || "Unknown server error" });
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Unknown server error",
+    });
   }
 };
 
@@ -269,8 +291,11 @@ export const getUsers = async (req: Request, res: Response) => {
 
     const users = await User.findAll({
       where: whereClause,
-      attributes: { exclude: ["password"] }, // Sécurité : on n'envoie jamais le mot de passe
-      order: [["createdAt", "DESC"]],
+      include: [
+        { model: Country, as: 'country', attributes: ['id', 'name'] }
+      ],
+      attributes: { exclude: ['password'] }, // Sécurité : on n'envoie jamais le mot de passe
+      order: [['createdAt', 'DESC']]
     });
 
     return res.status(200).json({
@@ -327,6 +352,7 @@ export const updateUserAccountStatus = async (
     });
 
     const safeUser = toSafeUser(updatedUser);
+    const io = (req as any).io as any;
 
     if (safeUser.role === "livreur") {
       const io = (req as any).io;
@@ -428,6 +454,7 @@ export const updateIdentityVerified = async (
     }
 
     const safeUser = toSafeUser(updatedUser);
+    const io = (req as any).io as any;
 
     await StatusHistoryRepository.createEntry({
       userId,
@@ -438,8 +465,23 @@ export const updateIdentityVerified = async (
     });
 
     // Notifier le livreur en temps réel quand son dossier est validé
+    if (targetRole === "livreur" && io) {
+      io.to("drivers").emit("driver:profile_updated", safeUser);
+      io.to("drivers").emit("driver:verification_updated", {
+        id: userId,
+        identityVerified,
+      });
+      io.to("drivers").emit("driver:availability_updated", {
+        id: userId,
+        isAvailable: Boolean((safeUser as any)?.isAvailable),
+      });
+      io.to(`user_${userId}`).emit("driver:availability_updated", {
+        id: userId,
+        isAvailable: Boolean((safeUser as any)?.isAvailable),
+      });
+    }
+
     if (identityVerified === true && targetRole === "livreur") {
-      const io = (req as any).io as any;
       const payload = {
         type: "DRIVER_VERIFICATION_APPROVED",
         title: "Verification terminee",
@@ -451,11 +493,6 @@ export const updateIdentityVerified = async (
 
       if (io) {
         io.to(`user_${userId}`).emit("driver:verification_completed", payload);
-        // Informer le dashboard admin ou les usagers du changement de statut du livreur
-        io.to("drivers").emit("driver:verification_updated", {
-          id: userId,
-          identityVerified: true,
-        });
       }
 
       const targetUser = await User.findByPk(userId, {

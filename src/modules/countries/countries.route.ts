@@ -1,14 +1,14 @@
 import express from "express";
 import {
   assignUserCountryByGps,
-  createCountry,
   getCountry,
   listCountries,
   resolveCountryByGps,
+  saveCountry,
   updateCountry,
 } from "./countries.controller";
-import { authenticate, authorize } from "../../middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "../../constants/roles";
+import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "@/constants/roles";
 
 const router = express.Router();
 
@@ -43,7 +43,7 @@ const router = express.Router();
  *         description: Pays cree
  */
 router.get("/", listCountries);
-router.post("/", authenticate, authorize(PRIVILEGED_ROLES), createCountry);
+router.post("/", authenticate, authorize(PRIVILEGED_ROLES), saveCountry);
 /**
  * @swagger
  * /countries/resolve-by-gps:

@@ -23,6 +23,7 @@ import paymentsRoutes from "../modules/payments/payments.route";
 import foodHomeRoutes from "../modules/food-home/food-home.route";
 import vehicleTypesRoutes from "../modules/vehicle-types/vehicle-types.route";
 import countriesRoutes from "../modules/countries/countries.route";
+import smsTestRoutes from "./sms-test.route";
 
 const router = Router();
 
@@ -50,5 +51,6 @@ router.use("/payments", paymentsRoutes);
 router.use("/food-home", foodHomeRoutes);
 router.use("/vehicle-types", vehicleTypesRoutes);
 router.use("/countries", countriesRoutes);
+router.use("/sms", smsTestRoutes);
 
 export default router;

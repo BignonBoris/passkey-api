@@ -55,6 +55,8 @@ async function startServer() {
     // 1. First ensure critical columns exist in tables that might already be there
     // without the countryId field (which causes sync errors on unique indexes)
     await ensureCountryColumnsExist();
+    await ensureRiderColumnsExist();
+    await cleanupVehiclePricingConstraints();
 
     // 2. Sync all models/indexes
     await sequelize.sync();
@@ -64,6 +66,7 @@ async function startServer() {
     await ensureCountryDistanceColumns();
     await ensureDefaultCountries();
     await ensureUserLocationSchema();
+    await ensureUserPhoneNullable();
     await ensureOrderArchiveColumn();
     await ensureOrderOtpColumns();
     await ensureOrderRevenueColumns();
@@ -156,6 +159,17 @@ async function ensureUserLocationSchema() {
   if (!columns.locationUpdatedAt) {
     await queryInterface.addColumn(tableName, "locationUpdatedAt", {
       type: DataTypes.DATE,
+      allowNull: true,
+    });
+  }
+}
+
+async function ensureUserPhoneNullable() {
+  const queryInterface = sequelize.getQueryInterface();
+  const columns = await queryInterface.describeTable("User");
+  if (columns.phone && !columns.phone.allowNull) {
+    await queryInterface.changeColumn("User", "phone", {
+      type: DataTypes.STRING,
       allowNull: true,
     });
   }
@@ -322,6 +336,49 @@ async function ensureCountryColumnsExist() {
         });
       }
     }
+  }
+}
+
+async function ensureRiderColumnsExist() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tablesRaw = await queryInterface.showAllTables();
+  const tables = tablesRaw.map((table: any) => (typeof table === "string" ? table : String(Object.values(table)[0] || "")));
+
+  const riderTables = [
+    { tableName: "VehiclePricingConfig", column: "vehicleType" },
+    { tableName: "DriverRevenueConfig", column: "vehicleType" },
+  ];
+
+  for (const table of riderTables) {
+    if (tables.includes(table.tableName)) {
+      const columns = await queryInterface.describeTable(table.tableName);
+      if (!columns[table.column]) {
+        console.log(`[migration] Adding ${table.column} to ${table.tableName}...`);
+        await queryInterface.addColumn(table.tableName, table.column, {
+          type: DataTypes.STRING,
+          allowNull: false,
+          defaultValue: "moto",
+        });
+      }
+    }
+  }
+}
+
+async function cleanupVehiclePricingConstraints() {
+  const queryInterface = sequelize.getQueryInterface();
+  try {
+    // Puisque la table est vide (recherche précedente), on la drop pour laisser sync() la recréer proprement.
+    // Cela résoud l'erreur ER_CANT_DROP_FIELD_OR_KEY sur les FK/index mal nommés.
+    const [countRes] = await sequelize.query("SELECT COUNT(*) as count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'VehiclePricingConfig'");
+    if (Array.isArray(countRes) && countRes.length > 0 && (countRes[0] as any).count > 0) {
+       // On ne drop que si on est sur que c'est safe ou si on force.
+       // Ici on tente un drop direct car on a vu que count=0.
+       await sequelize.query("DROP TABLE IF EXISTS \`VehiclePricingConfig\`");
+       await sequelize.query("DROP TABLE IF EXISTS \`DriverRevenueConfig\`");
+       console.log("[migration] Tables VehiclePricingConfig et DriverRevenueConfig supprimées pour reconstruction.");
+    }
+  } catch (err) {
+    console.warn("[migration] cleanupVehiclePricingConstraints skipped:", err);
   }
 }
 

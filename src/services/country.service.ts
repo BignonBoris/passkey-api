@@ -1,5 +1,5 @@
-import Country from "../models/country.model";
-import { DEFAULT_COUNTRIES, DEFAULT_COUNTRY_ID } from "../constants/countries";
+import Country from "@/models/country.model";
+import { DEFAULT_COUNTRIES, DEFAULT_COUNTRY_ID } from "@/constants/countries";
 import { Op } from "sequelize";
 
 function normalizeCountryLookup(value?: string | null) {
@@ -17,7 +17,25 @@ export async function ensureDefaultCountries() {
       }));
 
     if (existing) {
-      existing.set(country);
+      // Preserve admin-configured state (isActive, isDefault, distances)
+      // Only update structural fields (coordinates, codes, names)
+      existing.set({
+        id: country.id,
+        code: country.code,
+        iso2: country.iso2,
+        iso3: country.iso3,
+        name: country.name,
+        phoneCode: country.phoneCode,
+        currencyCode: country.currencyCode,
+        minLatitude: country.minLatitude,
+        maxLatitude: country.maxLatitude,
+        minLongitude: country.minLongitude,
+        maxLongitude: country.maxLongitude,
+        centerLatitude: country.centerLatitude,
+        centerLongitude: country.centerLongitude,
+        // Do NOT override isActive (let admin manage it)
+        // Do NOT override isDefault or distance fields
+      });
       await existing.save();
       continue;
     }

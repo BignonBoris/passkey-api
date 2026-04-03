@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { findCountryByIdOrCode, resolveCountryFromCoordinates } from '../../services/country.service';
+import { findCountryByIdOrCode, resolveCountryFromCoordinates } from '@/services/country.service';
 
 dotenv.config();
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
@@ -169,187 +169,187 @@ async function resolveGoogleLocation(lat: number, lng: number): Promise<Resolved
 }
 
 export const getRoute = async (req: Request, res: Response) => {
-  try {
-    const { origin, destination, waypoint } = req.body;
+    try {
+        const { origin, destination, waypoint } = req.body;
 
-    if (!origin || !destination) {
-      return res.status(400).json({ error: "L'origine et la destination sont requises." });
+        if (!origin || !destination) {
+            return res.status(400).json({ error: "L'origine et la destination sont requises." });
+        }
+
+        let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        if (waypoint) {
+            url += `&waypoints=optimize:false|${waypoint}`;
+        }
+        const response = await axios.get(url);
+
+        if (response.data.status !== 'OK') {
+            return res.status(400).json({ 
+                error: "Impossible de trouver un itinéraire", 
+                details: response.data 
+            });
+        }
+
+        const polyline = response.data.routes[0].overview_polyline.points;
+        const distance = response.data.routes[0].legs[0].distance.text;
+        const duration = response.data.routes[0].legs[0].duration.text;
+
+        return res.json({
+            success: true,
+            polyline: polyline,
+            distance: response.data.routes[0].legs.reduce((acc: any, leg: any) => acc + leg.distance.value, 0), // Somme des distances
+            // distance: distance,
+            // duration: duration
+        });
+
+    } catch (error: unknown) { // On explicite le type unknown
+        let errorMessage = "Erreur serveur lors du calcul de l'itinéraire";
+        
+        // CORRECTION ICI : On vérifie si c'est bien une instance d'Error
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        }
+
+        console.error("Erreur Google Maps:", errorMessage);
+        return res.status(500).json({ error: errorMessage });
     }
-
-    let url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
-    if (waypoint) {
-      url += `&waypoints=optimize:false|${waypoint}`;
-    }
-    const response = await axios.get(url);
-
-    if (response.data.status !== 'OK') {
-      return res.status(400).json({
-        error: "Impossible de trouver un itinéraire",
-        details: response.data
-      });
-    }
-
-    const polyline = response.data.routes[0].overview_polyline.points;
-    const distance = response.data.routes[0].legs[0].distance.text;
-    const duration = response.data.routes[0].legs[0].duration.text;
-
-    return res.json({
-      success: true,
-      polyline: polyline,
-      distance: response.data.routes[0].legs.reduce((acc: any, leg: any) => acc + leg.distance.value, 0), // Somme des distances
-      // distance: distance,
-      // duration: duration
-    });
-
-  } catch (error: unknown) { // On explicite le type unknown
-    let errorMessage = "Erreur serveur lors du calcul de l'itinéraire";
-
-    // CORRECTION ICI : On vérifie si c'est bien une instance d'Error
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-
-    console.error("Erreur Google Maps:", errorMessage);
-    return res.status(500).json({ error: errorMessage });
-  }
 };
 
 export const getCoordinatesFromAddress = async (req: Request, res: Response) => {
-  try {
-    const { address } = req.query; // ex: ?address=Cotonou+Erevan
+    try {
+        const { address } = req.query; // ex: ?address=Cotonou+Erevan
 
-    if (!address) return res.status(400).json({ error: "L'adresse est requise" });
+        if (!address) return res.status(400).json({ error: "L'adresse est requise" });
 
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
 
-    const response = await axios.get(url);
+        const response = await axios.get(url);
 
-    if (response.data.status !== 'OK') {
-      return res.status(400).json({ error: "Adresse introuvable" });
+        if (response.data.status !== 'OK') {
+            return res.status(400).json({ error: "Adresse introuvable" });
+        }
+
+        const location = response.data.results[0].geometry.location;
+        return res.json({
+            lat: location.lat,
+            lng: location.lng,
+            formattedAddress: response.data.results[0].formatted_address
+        });
+    } catch (error) {
+        return res.status(500).json({ error: "Erreur lors du géocodage" });
     }
-
-    const location = response.data.results[0].geometry.location;
-    return res.json({
-      lat: location.lat,
-      lng: location.lng,
-      formattedAddress: response.data.results[0].formatted_address
-    });
-  } catch (error) {
-    return res.status(500).json({ error: "Erreur lors du géocodage" });
-  }
 };
 
 export const geocodeAddress = async (req: Request, res: Response) => {
-  try {
-    const { address } = req.query;
+    try {
+        const { address } = req.query;
 
-    if (!address) {
-      return res.status(400).json({ error: "L'adresse est vide" });
+        if (!address) {
+            return res.status(400).json({ error: "L'adresse est vide" });
+        }
+
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+
+        const response = await axios.get(url);
+
+        if (response.data.status === 'OK') {
+            const location = response.data.results[0].geometry.location;
+            return res.json({
+                lat: location.lat,
+                lng: location.lng,
+                formattedAddress: response.data.results[0].formatted_address
+            });
+        } else {
+            return res.status(400).json({ error: "Adresse introuvable", status: response.data.status });
+        }
+    } catch (error) {
+        return res.status(500).json({ error: "Erreur de géocodage" });
     }
-
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address as string)}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
-
-    const response = await axios.get(url);
-
-    if (response.data.status === 'OK') {
-      const location = response.data.results[0].geometry.location;
-      return res.json({
-        lat: location.lat,
-        lng: location.lng,
-        formattedAddress: response.data.results[0].formatted_address
-      });
-    } else {
-      return res.status(400).json({ error: "Adresse introuvable", status: response.data.status });
-    }
-  } catch (error) {
-    return res.status(500).json({ error: "Erreur de géocodage" });
-  }
 };
 
 export const reverseGeocode = async (req: Request, res: Response) => {
-  try {
-    const lat = Number(req.query?.lat);
-    const lng = Number(req.query?.lng);
+    try {
+        const lat = Number(req.query?.lat);
+        const lng = Number(req.query?.lng);
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({ error: "Les coordonnees sont invalides" });
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({ error: "Les coordonnees sont invalides" });
+        }
+
+        const resolved = await resolveGoogleLocation(lat, lng);
+        const countryResolution = await resolveCountryFromCoordinates(lat, lng);
+
+        return res.json({
+            lat,
+            lng,
+            formattedAddress: resolved.placeName || resolved.address,
+            placeName: resolved.placeName,
+            address: resolved.address,
+            placeId: resolved.placeId,
+            latitude: resolved.latitude,
+            longitude: resolved.longitude,
+            country: countryResolution.country,
+            matchedByGps: countryResolution.matchedByGps,
+        });
+    } catch (error) {
+        return res.status(500).json({ error: "Erreur de geocodage inverse" });
     }
-
-    const resolved = await resolveGoogleLocation(lat, lng);
-    const countryResolution = await resolveCountryFromCoordinates(lat, lng);
-
-    return res.json({
-      lat,
-      lng,
-      formattedAddress: resolved.placeName || resolved.address,
-      placeName: resolved.placeName,
-      address: resolved.address,
-      placeId: resolved.placeId,
-      latitude: resolved.latitude,
-      longitude: resolved.longitude,
-      country: countryResolution.country,
-      matchedByGps: countryResolution.matchedByGps,
-    });
-  } catch (error) {
-    return res.status(500).json({ error: "Erreur de geocodage inverse" });
-  }
 };
 
 export const resolveLocation = async (req: Request, res: Response) => {
-  try {
-    const lat = Number(req.body?.lat);
-    const lng = Number(req.body?.lng);
+    try {
+        const lat = Number(req.body?.lat);
+        const lng = Number(req.body?.lng);
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return res.status(400).json({
-        success: false,
-        message: "Les coordonnees sont invalides",
-      });
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({
+                success: false,
+                message: "Les coordonnees sont invalides",
+            });
+        }
+
+        const data = await resolveGoogleLocation(lat, lng);
+        const countryResolution = await resolveCountryFromCoordinates(lat, lng);
+
+        return res.json({
+            success: true,
+            data: {
+                ...data,
+                country: countryResolution.country,
+                matchedByGps: countryResolution.matchedByGps,
+            },
+        });
+    } catch (error) {
+        console.error("Erreur resolve-location:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erreur lors de la resolution du lieu",
+        });
     }
-
-    const data = await resolveGoogleLocation(lat, lng);
-    const countryResolution = await resolveCountryFromCoordinates(lat, lng);
-
-    return res.json({
-      success: true,
-      data: {
-        ...data,
-        country: countryResolution.country,
-        matchedByGps: countryResolution.matchedByGps,
-      },
-    });
-  } catch (error) {
-    console.error("Erreur resolve-location:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Erreur lors de la resolution du lieu",
-    });
-  }
 };
 
 export const getPlaceSuggestions = async (req: Request, res: Response) => {
-  try {
-    const { input } = req.query;
-    if (!input) return res.json([]);
+    try {
+        const { input } = req.query;
+        if (!input) return res.json([]);
 
-    // On peut restreindre à un pays (ex: BJ pour le Bénin) pour plus de précision
-    const countryLookup = String(req.query?.countryId || req.query?.countryCode || "").trim();
-    const country = await findCountryByIdOrCode(countryLookup || undefined);
-    const countryCode = String(country?.get("iso2") || "BJ").trim().toLowerCase();
-    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input as string)}&components=country:${countryCode}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        // On peut restreindre à un pays (ex: BJ pour le Bénin) pour plus de précision
+        const countryLookup = String(req.query?.countryId || req.query?.countryCode || "").trim();
+        const country = await findCountryByIdOrCode(countryLookup || undefined);
+        const countryCode = String(country?.get("iso2") || "BJ").trim().toLowerCase();
+        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input as string)}&components=country:${countryCode}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
 
-    const response = await axios.get(url);
+        const response = await axios.get(url);
+        
+        // On ne renvoie que la description et l'ID du lieu
+        const suggestions = response.data.predictions.map((p: any) => ({
+            description: p.description,
+            placeId: p.place_id
+        }));
 
-    // On ne renvoie que la description et l'ID du lieu
-    const suggestions = response.data.predictions.map((p: any) => ({
-      description: p.description,
-      placeId: p.place_id
-    }));
-
-    return res.json(suggestions);
-  } catch (error) {
-    return res.status(500).json({ error: "Erreur suggestions" });
-  }
+        return res.json(suggestions);
+    } catch (error) {
+        return res.status(500).json({ error: "Erreur suggestions" });
+    }
 };
 
 
@@ -360,7 +360,7 @@ export const calculatePrice = async (req: Request<{}, {}, DistanceRequest>, res:
 
   try {
     const googleUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destination)}&key=${GOOGLE_KEY}`;
-
+    
     const response = await axios.get(googleUrl);
     const element = response.data.rows[0].elements[0];
 

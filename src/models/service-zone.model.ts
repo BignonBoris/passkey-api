@@ -1,6 +1,6 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
-import { DEFAULT_COUNTRY_ID } from "../constants/countries";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 class ServiceZone extends Model {
   public id!: string;

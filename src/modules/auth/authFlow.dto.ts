@@ -34,7 +34,6 @@ export const adminSignInSchema = z.object({
 
 export const adminSignUpSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  phone: z.string().min(8),
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(["admin", "sous-admin", "restaurant"]).default("admin"),

@@ -1,15 +1,14 @@
 import bcrypt from "bcrypt";
-import User from "../../models/user.model";
-import { generateOTP } from "../../utils/otp";
-import { UserRepository } from "../../repositories/user.repository";
+import User from "@/models/user.model";
+import { generateOTP } from "@/utils/otp";
+import { UserRepository } from "@/repositories/user.repository";
 import jwt from "jsonwebtoken";
-import { JWT_EXPIRES_IN, JWT_SECRET } from "../../config/jwt";
-import { SmsService } from "../../services/sms.service";
-import { nomalizeCustomerPhone } from "../../utils/phoneNormalize";
+import { JWT_EXPIRES_IN, JWT_SECRET } from "@/config/jwt";
+import { SmsService } from "@/services/sms/sms.service";
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
 
 type AdminSignUpInput = {
   name?: string;
-  phone: string;
   email: string;
   password: string;
   role: "admin" | "sous-admin" | "restaurant" | "usager" | "livreur";
@@ -28,6 +27,9 @@ async function saveOtp(phone: string, role: string = "usager") {
     { otpCode: otp, otpExpiresAt },
     { where: { id: user.id } }
   );
+
+  // Appel automatique au service SMS (Twilio ou FasterMessage selon le .env)
+  await SmsService.sendOtp(phone, otp);
 
   return process.env.NODE_ENV === "development" ? otp : undefined;
 }
@@ -81,29 +83,6 @@ export class AuthFlowService {
       existingUserWithRole,
     };
   }
-  // static async checkPhone(phone: string, role: string) {
-  //   const user = await UserRepository.findByPhone(phone);
-  //   const exists = Boolean(user);
-  //   const foundRole = user?.role ?? null;
-  //   const matchesProfile = foundRole === role;
-  //   const isSuspended = user?.accountStatus === "suspended";
-
-  //   let nextStep = "REGISTER";
-  //   if (exists && matchesProfile) {
-  //     nextStep = "LOGIN";
-  //   } else if (exists && !matchesProfile) {
-  //     nextStep = "PROFILE_MISMATCH";
-  //   }
-
-  //   return {
-  //     exists,
-  //     matchesProfile,
-  //     isSuspended,
-  //     foundRole,
-  //     requestedRole: role,
-  //     nextStep,
-  //   };
-  // }
 
   static async signIn(phone: string, role: string, password: string) {
     const normalizedPhone = await nomalizeCustomerPhone(phone);
@@ -181,7 +160,7 @@ export class AuthFlowService {
     }
     const existingUser = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     if (existingUser) {
-      return { success: false, status: 409, message: "Le téléphone existe déjà" };
+      return { success: false, status: 409, message: `L'utilisateur avec le numéro ${normalizedPhone} existe déjà comme ${role}.` };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -283,11 +262,6 @@ export class AuthFlowService {
   }
 
   static async adminSignUp(input: AdminSignUpInput) {
-    const existingPhone = await UserRepository.findByPhone(input.phone);
-    if (existingPhone) {
-      return { success: false, status: 409, message: "Ce numéro de téléphone existe déjà." };
-    }
-
     const existingEmail = await UserRepository.findByEmail(input.email);
     if (existingEmail) {
       return { success: false, status: 409, message: "Cet email existe déjà." };
@@ -296,7 +270,6 @@ export class AuthFlowService {
     const hashedPassword = await bcrypt.hash(input.password, 10);
     const user = await User.create({
       name: input.name?.trim() || null,
-      phone: input.phone,
       email: input.email.trim().toLowerCase(),
       password: hashedPassword,
       role: input.role,

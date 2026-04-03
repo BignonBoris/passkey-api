@@ -1,6 +1,7 @@
 import { DataTypes, Model } from "sequelize";
+import { randomBytes } from 'crypto';
 import sequelize from "../config/database";
-import { DEFAULT_COUNTRY_ID } from "../constants/countries";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
 
 class Country extends Model {
   public id!: string;
@@ -18,13 +19,15 @@ class Country extends Model {
   public centerLongitude!: number | null;
   public isActive!: boolean;
   public isDefault!: boolean;
+  public deliveryDistanceKm!: number;
+  public driverLocationDistanceKm!: number;
 }
 
 Country.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DEFAULT_COUNTRY_ID,
+      type: DataTypes.STRING(16),
+      defaultValue: () => randomBytes(8).toString('hex'),
       primaryKey: true,
     },
     code: {
@@ -39,8 +42,7 @@ Country.init(
     },
     iso3: {
       type: DataTypes.STRING(3),
-      allowNull: false,
-      unique: true,
+      allowNull: true,
     },
     name: {
       type: DataTypes.STRING,
@@ -89,6 +91,16 @@ Country.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    deliveryDistanceKm: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 10,
+    },
+    driverLocationDistanceKm: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 2,
     },
   },
   {

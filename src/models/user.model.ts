@@ -1,6 +1,7 @@
 import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/database';
-import { DEFAULT_COUNTRY_ID } from '../constants/countries';
+import { DEFAULT_COUNTRY_ID } from '@/constants/countries';
+import Country from './country.model';
 
 class User extends Model {
   public id!: string;
@@ -42,7 +43,7 @@ User.init({
   phone: {
     type: DataTypes.STRING,
     unique: false,
-    allowNull: false,
+    allowNull: true,
   },
   email: {
     type: DataTypes.STRING,
@@ -167,5 +168,8 @@ User.init({
     }
   ]
 });
+
+User.belongsTo(Country, { foreignKey: 'countryId', as: 'country' });
+Country.hasMany(User, { foreignKey: 'countryId', as: 'users' });
 
 export default User;

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import RefundRequest from "../../models/refund-request.model";
+import RefundRequest from "@/models/refund-request.model";
 
 export async function listRefunds(req: Request, res: Response) {
   try {

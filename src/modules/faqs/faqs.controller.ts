@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import Faq from "../../models/faq.model";
+import Faq from "@/models/faq.model";
 
 const MAX_FAQ_QUESTION_LENGTH = 140;
 

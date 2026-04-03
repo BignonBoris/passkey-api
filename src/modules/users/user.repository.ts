@@ -1,4 +1,4 @@
-import User from '../../models/user.model';
+import User from '@/models/user.model';
 
 export class UserRepository {
   static findByPhone(phone: string) {
@@ -12,31 +12,31 @@ export class UserRepository {
   }
   static async updateFcmToken(userId: string, token: string) {
     return await User.update(
-      { fcmToken: token },
+      { fcmToken: token }, 
       { where: { id: userId } }
     );
   }
-
+  
   static async updateUser(userData: Partial<User>) {
-    const { id, ...updateData } = userData;
+  const { id, ...updateData } = userData;
 
-    if (!id) {
-      throw new Error("L'ID de l'utilisateur est requis pour la mise à jour.");
-    }
-
-    // 1. Exécuter la mise à jour
-    // Renvoie [nombre_de_lignes_affectées]
-    const [affectedCount] = await User.update(updateData, {
-      where: { id: id }
-    });
-
-    if (affectedCount === 0) {
-      return null; // Ou gérer l'erreur si l'utilisateur n'existe pas
-    }
-
-    // 2. Récupérer et retourner l'objet mis à jour 
-    return await User.findByPk(id, { raw: true });
+  if (!id) {
+    throw new Error("L'ID de l'utilisateur est requis pour la mise à jour.");
   }
+
+  // 1. Exécuter la mise à jour
+  // Renvoie [nombre_de_lignes_affectées]
+  const [affectedCount] = await User.update(updateData, {
+    where: { id: id }
+  });
+
+  if (affectedCount === 0) {
+    return null; // Ou gérer l'erreur si l'utilisateur n'existe pas
+  }
+
+  // 2. Récupérer et retourner l'objet mis à jour 
+  return await User.findByPk(id, { raw: true });
+}
 
   static async findById(id: string) {
     return User.findByPk(id);
@@ -84,9 +84,28 @@ export class UserRepository {
     identityVerified: boolean;
   }) {
     const { userId, identityVerified } = params;
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return null;
+    }
+
+    const isDriver = String(user.get("role") || "") === "livreur";
+    const isAccountActive = String(user.get("accountStatus") || "active") === "active";
+    const updateData: Record<string, unknown> = {
+      identityVerified,
+    };
+
+    if (isDriver && identityVerified && isAccountActive) {
+      updateData.isActive = true;
+    }
+
+    if (isDriver && !identityVerified) {
+      updateData.isActive = false;
+      updateData.isAvailable = false;
+    }
 
     const [affectedCount] = await User.update(
-      { identityVerified },
+      updateData,
       { where: { id: userId } }
     );
 

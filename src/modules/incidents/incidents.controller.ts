@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import Incident from "../../models/incident.model";
+import Incident from "@/models/incident.model";
 
 export async function listIncidents(req: Request, res: Response) {
   try {

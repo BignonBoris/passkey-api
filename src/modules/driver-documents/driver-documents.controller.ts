@@ -1,12 +1,12 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import DriverDocument from "../../models/driver-document.model";
-import User from "../../models/user.model";
-import KycRequest from "../../models/kyc-request.model";
-import DriverVehicle from "../../models/driver-vehicle.model";
-import VehicleType from "../../models/vehicle-type.model";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import { resolveCountryId } from "../../services/country.service";
+import DriverDocument from "@/models/driver-document.model";
+import User from "@/models/user.model";
+import KycRequest from "@/models/kyc-request.model";
+import DriverVehicle from "@/models/driver-vehicle.model";
+import VehicleType from "@/models/vehicle-type.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import { resolveCountryId } from "@/services/country.service";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",
@@ -72,11 +72,23 @@ export async function createDriverDocument(req: Request, res: Response) {
     if (!userId || !type) {
       return res.status(400).json({ success: false, message: "userId and type are required" });
     }
+
+    // Handle uploaded file if present
+    let finalUrl = url;
+    if ((req as any).file) {
+      finalUrl = buildPublicDocumentUrl(req, (req as any).file.filename);
+    }
+
+    if (!finalUrl) {
+      return res.status(400).json({ success: false, message: "Document file or URL is required" });
+    }
+
     const row = await DriverDocument.create({
       userId,
       type,
-      url: url || null,
+      url: finalUrl,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
+      status: "APPROVED", // Admin manual upload
     });
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {

@@ -1,6 +1,7 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
-import { DEFAULT_COUNTRY_ID } from "../constants/countries";
+import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
+import Country from "./country.model";
 
 class VehiclePricingConfig extends Model {
   public id!: string;
@@ -21,9 +22,10 @@ VehiclePricingConfig.init(
       primaryKey: true,
     },
     countryId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(16),
       allowNull: false,
       defaultValue: DEFAULT_COUNTRY_ID,
+      references: { model: Country, key: "id" },
     },
     vehicleType: {
       type: DataTypes.STRING,
@@ -69,5 +71,9 @@ VehiclePricingConfig.init(
     ],
   }
 );
+
+
+Country.hasMany(VehiclePricingConfig, { foreignKey: "countryId", as: "pricingConfigs" });
+VehiclePricingConfig.belongsTo(Country, { foreignKey: "countryId", as: "country" });
 
 export default VehiclePricingConfig;

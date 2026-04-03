@@ -1,15 +1,15 @@
 import { Request, Response } from "express";
 import { Op, WhereOptions } from "sequelize";
 import bcrypt from "bcrypt";
-import Order from "../../models/order.model";
-import Payment from "../../models/payment.model";
-import FoodHomeCategory from "../../models/food-home-category.model";
-import FoodHomeProduct from "../../models/food-home-product.model";
-import FoodHomePromo from "../../models/food-home-promo.model";
-import FoodHomeRestaurant from "../../models/food-home-restaurant.model";
-import User from "../../models/user.model";
-import UserAddress from "../../models/user-address.model";
-import { AuthenticatedRequest } from "../../types/auth-request";
+import Order from "@/models/order.model";
+import Payment from "@/models/payment.model";
+import FoodHomeCategory from "@/models/food-home-category.model";
+import FoodHomeProduct from "@/models/food-home-product.model";
+import FoodHomePromo from "@/models/food-home-promo.model";
+import FoodHomeRestaurant from "@/models/food-home-restaurant.model";
+import User from "@/models/user.model";
+import UserAddress from "@/models/user-address.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
 
 function buildPublicUploadUrl(req: Request, folder: string, storedName: string) {
   const protocol = req.protocol;

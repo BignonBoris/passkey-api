@@ -10,9 +10,9 @@ import {
   submitMyDriverOnboarding,
   updateMyDriverOnboarding,
 } from "./driver-documents.controller";
-import { authenticate, authorize } from "../../middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "../../constants/roles";
-import { driverDocsUpload } from "../../middlewares/upload.middleware";
+import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "@/constants/roles";
+import { driverDocsUpload } from "@/middlewares/upload.middleware";
 
 const router = express.Router();
 
@@ -71,7 +71,7 @@ router.get("/", authenticate, authorize(PRIVILEGED_ROLES), listDriverDocuments);
  *       201:
  *         description: Document créé
  */
-router.post("/", authenticate, authorize(PRIVILEGED_ROLES), createDriverDocument);
+router.post("/", authenticate, authorize(PRIVILEGED_ROLES), driverDocsUpload.single("file"), createDriverDocument);
 
 /**
  * @swagger

@@ -5,19 +5,19 @@ import {
   sendSmsNotification,
 } from '../../services/notification.service';
 import { Server } from 'socket.io';
-import User from '../../models/user.model';
+import User from '@/models/user.model';
 import { Op } from 'sequelize';
-import Order from '../../models/order.model';
-import UserAddress from '../../models/user-address.model';
-import DriverVehicle from "../../models/driver-vehicle.model";
-import DriverDocument from "../../models/driver-document.model";
-import Payment from "../../models/payment.model";
-import { calculateDeliveryPricing, calculateWaitingFees } from "../../services/pricing.service";
-import { calculateCancellationFees } from "../../services/cancellation.service";
-import { resolveCountryId } from "../../services/country.service";
-import AppSettings from '../../models/app-settings.model';
-import sequelize from '../../config/database';
-import { AuthenticatedRequest } from '../../types/auth-request';
+import Order from '@/models/order.model';
+import UserAddress from '@/models/user-address.model';
+import DriverVehicle from "@/models/driver-vehicle.model";
+import DriverDocument from "@/models/driver-document.model";
+import Payment from "@/models/payment.model";
+import { calculateDeliveryPricing, calculateWaitingFees } from "@/services/pricing.service";
+import { calculateCancellationFees } from "@/services/cancellation.service";
+import { resolveCountryId } from "@/services/country.service";
+import AppSettings from '@/models/app-settings.model';
+import sequelize from '@/config/database';
+import { AuthenticatedRequest } from '@/types/auth-request';
 
 const DELIVERY_STATUSES = [
   "PENDING",

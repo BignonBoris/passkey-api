@@ -1,6 +1,6 @@
-import { PricingRuleType, PricingAdjustmentType } from "../models/pricing-rule.model";
-import { calculateWaitingFees } from "./pricing.service";
-import PricingRule from "../models/pricing-rule.model";
+import { PricingRuleType, PricingAdjustmentType } from "@/models/pricing-rule.model";
+import { calculateWaitingFees } from "@/services/pricing.service";
+import PricingRule from "@/models/pricing-rule.model";
 
 const DEFAULT_DRIVER_SHARE_PERCENTAGE = 0.6;
 const DEFAULT_CANCELLATION_AFTER_FEE = 500;

@@ -1,16 +1,16 @@
 import { Response } from "express";
-import Order from "../../models/order.model";
-import Payment from "../../models/payment.model";
-import User from "../../models/user.model";
-import { AuthenticatedRequest } from "../../types/auth-request";
+import Order from "@/models/order.model";
+import Payment from "@/models/payment.model";
+import User from "@/models/user.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
 import axios from "axios";
 import {
   createFedaPayCheckout,
   extractFedaPayTransactionIdFromWebhook,
   isFedaPayConfigured,
   syncPaymentWithFedaPay,
-} from "../../services/fedapay.service";
-import { sendPushNotification } from "../../services/notification.service";
+} from "@/services/fedapay.service";
+import { sendPushNotification } from "@/services/notification.service";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
@@ -720,14 +720,6 @@ export async function markOrderCashPaymentPaid(req: AuthenticatedRequest, res: R
       return res.status(400).json({
         success: false,
         message: "Seules les courses en especes peuvent etre marquees comme payees par le livreur",
-      });
-    }
-
-    const orderStatus = String(order.get("status") || "").trim().toUpperCase();
-    if (orderStatus !== "COMPLETED") {
-      return res.status(400).json({
-        success: false,
-        message: "La course doit etre terminee avant de confirmer le paiement en especes",
       });
     }
 

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import VehiclePricingConfig from '../../models/vehicle-pricing-config.model';
-import VehicleType from '../../models/vehicle-type.model';
+import VehiclePricingConfig from '@/models/vehicle-pricing-config.model';
+import VehicleType from '@/models/vehicle-type.model';
 import { getRouteDetails } from './maps.service';
-import { resolveCountryFromCoordinates } from '../../services/country.service';
+import { resolveCountryFromCoordinates } from '@/services/country.service';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
   moto: 0.8,
@@ -53,15 +53,15 @@ export const calculateTrip = async (req: Request, res: Response) => {
 
   const sourceRows = vehicleTypes.length
     ? vehicleTypes.map((item) => ({
-      code: String(item.get('code') || '').trim().toLowerCase(),
-      name: String(item.get('name') || '').trim(),
-      iconKey: String(item.get('iconKey') || 'two_wheeler_rounded').trim(),
-    }))
+        code: String(item.get('code') || '').trim().toLowerCase(),
+        name: String(item.get('name') || '').trim(),
+        iconKey: String(item.get('iconKey') || 'two_wheeler_rounded').trim(),
+      }))
     : configs.map((config) => ({
-      code: String(config.vehicleType || '').trim().toLowerCase(),
-      name: toVehicleLabel(String(config.vehicleType || '').trim().toLowerCase()),
-      iconKey: 'two_wheeler_rounded',
-    }));
+        code: String(config.vehicleType || '').trim().toLowerCase(),
+        name: toVehicleLabel(String(config.vehicleType || '').trim().toLowerCase()),
+        iconKey: 'two_wheeler_rounded',
+      }));
 
   if (!sourceRows.length) {
     return res.status(404).json({

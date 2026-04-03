@@ -1,10 +1,11 @@
 import "dotenv/config";
-import { generateOTP } from "../../../utils/otp";
-import { UserService } from "../../../modules/users/user.service";
+import { generateOTP } from "@/utils/otp";
+import { UserService } from "@/modules/users/user.service";
 import bcrypt from "bcrypt";
-import { UserRepository } from "../../../repositories/user.repository";
-import User from '../../../models/user.model';
-import { nomalizeCustomerPhone } from "../../../utils/phoneNormalize";
+import { UserRepository } from "@/repositories/user.repository";
+import User from '@/models/user.model';
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
+import { SmsService } from "@/services/sms/sms.service";
 
 export class LoginService {
   static async login(phone: string, password: string, role: string) {
@@ -34,6 +35,9 @@ export class LoginService {
       { where: { id: user.id } }
     );
 
+    // Envoi du SMS via le service centralisé
+    await SmsService.sendOtp(phone, otp);
+
     return {
       userId: user.id,
       otp: process.env.NODE_ENV === "development" ? otp : undefined
@@ -56,6 +60,9 @@ export class LoginService {
       { otpCode: otp, otpExpiresAt },
       { where: { id: user.id } }
     );
+
+    // Envoi du SMS via le service centralisé
+    await SmsService.sendOtp(phone, otp);
 
     return {
       userId: user.id,

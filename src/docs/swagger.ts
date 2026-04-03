@@ -198,9 +198,9 @@ export const swaggerSpec = swaggerJSDoc({
             driverRatingComment: { type: "string", nullable: true },
             driverRatedAt: { type: "string", format: "date-time", nullable: true },
             ratedByUserId: { type: "string", format: "uuid", nullable: true },
-            status: { 
-              type: "string", 
-              enum: ["PENDING", "ACCEPTED", "DRIVER_ASSIGNED", "DRIVER_ARRIVED_PICKUP", "DRIVER_LEFT_PICKUP", "PICKED_UP", "IN_TRANSIT", "COMPLETED", "CANCELLED"] 
+            status: {
+              type: "string",
+              enum: ["PENDING", "ACCEPTED", "DRIVER_ASSIGNED", "DRIVER_ARRIVED_PICKUP", "DRIVER_LEFT_PICKUP", "PICKED_UP", "IN_TRANSIT", "COMPLETED", "CANCELLED"]
             },
             vehicleType: { type: "string", example: "moto" },
             createdAt: { type: "string", format: "date-time" },
@@ -1049,7 +1049,11 @@ export const swaggerSpec = swaggerJSDoc({
       { name: "VehicleTypes", description: "Types de vehicules par pays" },
       { name: "Countries", description: "Pays et resolution GPS" },
       { name: "FoodHome", description: "Contenu de l'accueil Eats" },
+      { name: "Sms", description: "SMS & OTP Testing" },
     ],
   },
-  apis: ["src/modules/**/*.routes.ts", "src/modules/**/*.route.ts"],
+  apis: [
+    "src/**/*.routes.ts",
+    "src/**/*.route.ts"
+  ],
 });

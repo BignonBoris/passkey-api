@@ -1,4 +1,4 @@
-import StatusHistory from "../models/status-history.model";
+import StatusHistory from "@/models/status-history.model";
 
 export class StatusHistoryRepository {
   static createEntry(params: {

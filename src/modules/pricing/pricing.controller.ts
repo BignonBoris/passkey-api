@@ -1,14 +1,15 @@
 import { Request, Response } from "express";
-import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
-import { calculateDeliveryPricing } from "../../services/pricing.service";
+import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
+import Country from "@/models/country.model";
+import { calculateDeliveryPricing } from "@/services/pricing.service";
 import {
   listPricingRules,
   upsertPricingRule,
   removePricingRule,
   PricingRulePayload,
-} from "../../services/config.service";
-import PricingRule from "../../models/pricing-rule.model";
-import { resolveCountryId } from "../../services/country.service";
+} from "@/services/config.service";
+import PricingRule from "@/models/pricing-rule.model";
+import { resolveCountryId } from "@/services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
   const num = Number(value);
@@ -17,15 +18,28 @@ function parseNumber(value: unknown, fallback = 0) {
 
 export async function listPricingConfigs(req: Request, res: Response) {
   try {
-    const { vehicleType } = req.query as Record<string, string | undefined>;
-    const countryId = await resolveCountryId(String(req.query.countryId || ""));
-    const whereClause: Record<string, unknown> = { countryId };
-    if (vehicleType) whereClause.vehicleType = vehicleType;
+    const { vehicleType, countryId: rawCountryId } = req.query as Record<string, string | undefined>;
+    const whereClause: Record<string, unknown> = {};
+
+    if (rawCountryId && rawCountryId !== "all") {
+      whereClause.countryId = await resolveCountryId(String(rawCountryId));
+    }
+    if (vehicleType) {
+      whereClause.vehicleType = vehicleType;
+    }
 
     const rows = await VehiclePricingConfig.findAll({
       where: whereClause,
+      include: [
+        {
+          model: Country,
+          as: "country",
+          attributes: ["name"],
+        },
+      ],
       order: [["updatedAt", "DESC"]],
     });
+    console.log(`[listPricingConfigs] Found ${rows.length} configs for where:`, whereClause);
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to list pricing configs" });
