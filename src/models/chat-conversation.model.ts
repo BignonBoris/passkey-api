@@ -62,11 +62,11 @@ ChatConversation.init(
   }
 );
 
-User.hasMany(ChatConversation, { foreignKey: "userId", as: "userConversations" });
-User.hasMany(ChatConversation, { foreignKey: "driverId", as: "driverConversations" });
-ChatConversation.belongsTo(User, { foreignKey: "userId", as: "user" });
-ChatConversation.belongsTo(User, { foreignKey: "driverId", as: "driver" });
-Order.hasMany(ChatConversation, { foreignKey: "orderId", as: "chatConversations" });
-ChatConversation.belongsTo(Order, { foreignKey: "orderId", as: "order" });
+User.hasMany(ChatConversation, { foreignKey: "userId", as: "userConversations", constraints: false });
+User.hasMany(ChatConversation, { foreignKey: "driverId", as: "driverConversations", constraints: false });
+ChatConversation.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
+ChatConversation.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
+Order.hasMany(ChatConversation, { foreignKey: "orderId", as: "chatConversations", constraints: false });
+ChatConversation.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
 
 export default ChatConversation;

@@ -169,7 +169,7 @@ User.init({
   ]
 });
 
-User.belongsTo(Country, { foreignKey: 'countryId', as: 'country' });
-Country.hasMany(User, { foreignKey: 'countryId', as: 'users' });
+User.belongsTo(Country, { foreignKey: 'countryId', as: 'country', constraints: false });
+Country.hasMany(User, { foreignKey: 'countryId', as: 'users', constraints: false });
 
 export default User;

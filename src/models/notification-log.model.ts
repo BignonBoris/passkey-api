@@ -55,7 +55,7 @@ NotificationLog.init(
   }
 );
 
-User.hasMany(NotificationLog, { foreignKey: "recipientId", as: "notifications" });
-NotificationLog.belongsTo(User, { foreignKey: "recipientId", as: "recipient" });
+User.hasMany(NotificationLog, { foreignKey: "recipientId", as: "notifications", constraints: false });
+NotificationLog.belongsTo(User, { foreignKey: "recipientId", as: "recipient", constraints: false });
 
 export default NotificationLog;

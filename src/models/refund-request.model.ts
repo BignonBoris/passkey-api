@@ -68,11 +68,11 @@ RefundRequest.init(
   }
 );
 
-Payment.hasMany(RefundRequest, { foreignKey: "paymentId", as: "refunds" });
-RefundRequest.belongsTo(Payment, { foreignKey: "paymentId", as: "payment" });
-Order.hasMany(RefundRequest, { foreignKey: "orderId", as: "refunds" });
-RefundRequest.belongsTo(Order, { foreignKey: "orderId", as: "order" });
-User.hasMany(RefundRequest, { foreignKey: "userId", as: "refunds" });
-RefundRequest.belongsTo(User, { foreignKey: "userId", as: "user" });
+Payment.hasMany(RefundRequest, { foreignKey: "paymentId", as: "refunds", constraints: false });
+RefundRequest.belongsTo(Payment, { foreignKey: "paymentId", as: "payment", constraints: false });
+Order.hasMany(RefundRequest, { foreignKey: "orderId", as: "refunds", constraints: false });
+RefundRequest.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
+User.hasMany(RefundRequest, { foreignKey: "userId", as: "refunds", constraints: false });
+RefundRequest.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
 
 export default RefundRequest;

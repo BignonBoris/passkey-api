@@ -257,9 +257,9 @@ Order.init(
   }
 );
 
-User.hasMany(Order, { foreignKey: "userId", as: "clientOrders" });
-Order.belongsTo(User, { foreignKey: "userId", as: "client" });
-User.hasMany(Order, { foreignKey: "driverId", as: "driverOrders" });
-Order.belongsTo(User, { foreignKey: "driverId", as: "driver" });
+User.hasMany(Order, { foreignKey: "userId", as: "clientOrders", constraints: false });
+Order.belongsTo(User, { foreignKey: "userId", as: "client", constraints: false });
+User.hasMany(Order, { foreignKey: "driverId", as: "driverOrders", constraints: false });
+Order.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
 
 export default Order;

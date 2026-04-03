@@ -57,7 +57,7 @@ Payout.init(
   }
 );
 
-User.hasMany(Payout, { foreignKey: "driverId", as: "payouts" });
-Payout.belongsTo(User, { foreignKey: "driverId", as: "driver" });
+User.hasMany(Payout, { foreignKey: "driverId", as: "payouts", constraints: false });
+Payout.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
 
 export default Payout;

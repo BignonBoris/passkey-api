@@ -130,11 +130,11 @@ Payment.init(
   }
 );
 
-User.hasMany(Payment, { foreignKey: "userId", as: "payments" });
-Payment.belongsTo(User, { foreignKey: "userId", as: "user" });
-User.hasMany(Payment, { foreignKey: "driverId", as: "driverPayments" });
-Payment.belongsTo(User, { foreignKey: "driverId", as: "driver" });
-Order.hasMany(Payment, { foreignKey: "orderId", as: "payments" });
-Payment.belongsTo(Order, { foreignKey: "orderId", as: "order" });
+User.hasMany(Payment, { foreignKey: "userId", as: "payments", constraints: false });
+Payment.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
+User.hasMany(Payment, { foreignKey: "driverId", as: "driverPayments", constraints: false });
+Payment.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
+Order.hasMany(Payment, { foreignKey: "orderId", as: "payments", constraints: false });
+Payment.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
 
 export default Payment;

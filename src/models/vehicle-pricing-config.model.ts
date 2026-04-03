@@ -73,7 +73,7 @@ VehiclePricingConfig.init(
 );
 
 
-Country.hasMany(VehiclePricingConfig, { foreignKey: "countryId", as: "pricingConfigs" });
-VehiclePricingConfig.belongsTo(Country, { foreignKey: "countryId", as: "country" });
+Country.hasMany(VehiclePricingConfig, { foreignKey: "countryId", as: "pricingConfigs", constraints: false });
+VehiclePricingConfig.belongsTo(Country, { foreignKey: "countryId", as: "country", constraints: false });
 
 export default VehiclePricingConfig;

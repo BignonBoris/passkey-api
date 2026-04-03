@@ -57,9 +57,9 @@ Incident.init(
   }
 );
 
-Order.hasMany(Incident, { foreignKey: "orderId", as: "incidents" });
-Incident.belongsTo(Order, { foreignKey: "orderId", as: "order" });
-User.hasMany(Incident, { foreignKey: "driverId", as: "driverIncidents" });
-Incident.belongsTo(User, { foreignKey: "driverId", as: "driver" });
+Order.hasMany(Incident, { foreignKey: "orderId", as: "incidents", constraints: false });
+Incident.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
+User.hasMany(Incident, { foreignKey: "driverId", as: "driverIncidents", constraints: false });
+Incident.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
 
 export default Incident;
