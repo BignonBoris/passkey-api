@@ -63,7 +63,7 @@ function shouldRunSchemaBootstrap() {
     return isTruthy(process.env.DB_SYNC_ON_START);
   }
 
-  return process.env.NODE_ENV !== "production";
+  return false;
 }
 
 async function shouldRunInitialSchemaSync() {
