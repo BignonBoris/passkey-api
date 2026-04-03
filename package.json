@@ -1,55 +1,5 @@
 {
-  "name": "api",
-  "version": "1.0.0",
-  "description": "e-Cheetah Backend API",
-  "main": "dist/src/server.js",
-  "scripts": {
-    "dev": "nodemon",
-    "build": "tsc",
-    "start": "node dist/src/server.js",
-    "render-build": "npm ci && npm run build"
-  },
-  "type": "commonjs",
   "dependencies": {
-    "@prisma/adapter-mariadb": "^7.3.0",
-    "@prisma/adapter-pg": "^7.3.0",
-    "@prisma/client": "^7.4.0",
-    "axios": "^1.13.4",
-    "bcrypt": "^6.0.0",
-    "cors": "^2.8.6",
-    "express": "^4.19.2",
-    "firebase-admin": "^13.6.1",
-    "google-libphonenumber": "^3.2.44",
-    "helmet": "^8.1.0",
-    "ioredis": "^5.9.2",
-    "jsonwebtoken": "^9.0.3",
-    "mariadb": "^3.4.5",
-    "multer": "^2.1.0",
-    "mysql2": "^3.17.1",
-    "pg": "^8.18.0",
-    "prisma": "^7.3.0",
-    "sequelize": "^6.37.7",
-    "socket.io": "^4.8.3",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1",
-    "winston": "^3.19.0",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^4.17.21",
-    "@types/google-libphonenumber": "^7.4.30",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^20.11.5",
-    "@types/pg": "^8.16.0",
-    "@types/sequelize": "^4.28.20",
-    "@types/swagger-jsdoc": "^6.0.4",
-    "@types/swagger-ui-express": "^4.1.8",
-    "dotenv": "^17.2.4",
-    "nodemon": "^3.1.11",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "vue-router": "^5.0.3"
   }
 }
