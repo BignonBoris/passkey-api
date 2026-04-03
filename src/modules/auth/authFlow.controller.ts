@@ -9,7 +9,7 @@ import {
   signUpSchema,
 } from "./authFlow.dto";
 import { AuthFlowService } from "./authFlow.service";
-import { catchAsync } from "@/utils/catchAsync";
+import { catchAsync } from "../../utils/catchAsync";
 
 export const checkPhone = catchAsync(async (req: Request, res: Response) => {
   const body = checkPhoneSchema.parse(req.body);

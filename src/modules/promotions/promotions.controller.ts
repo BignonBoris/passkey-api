@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import Promotion from "@/models/promotion.model";
-import PromotionRedemption from "@/models/promotion-redemption.model";
+import Promotion from "../../models/promotion.model";
+import PromotionRedemption from "../../models/promotion-redemption.model";
 
 export async function listPromotions(req: Request, res: Response) {
   try {

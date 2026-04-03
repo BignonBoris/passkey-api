@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import NotificationLog from "@/models/notification-log.model";
+import NotificationLog from "../../models/notification-log.model";
 
 export async function listNotificationLogs(req: Request, res: Response) {
   try {

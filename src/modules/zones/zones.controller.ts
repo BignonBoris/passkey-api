@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import ServiceZone from "@/models/service-zone.model";
-import { resolveCountryId } from "@/services/country.service";
+import ServiceZone from "../../models/service-zone.model";
+import { resolveCountryId } from "../../services/country.service";
 
 export async function listZones(req: Request, res: Response) {
   try {

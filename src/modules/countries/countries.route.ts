@@ -7,8 +7,8 @@ import {
   saveCountry,
   updateCountry,
 } from "./countries.controller";
-import { authenticate, authorize } from "@/middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "@/constants/roles";
+import { authenticate, authorize } from "../../middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "../../constants/roles";
 
 const router = express.Router();
 

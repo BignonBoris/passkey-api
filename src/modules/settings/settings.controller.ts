@@ -4,7 +4,7 @@ import AppSettings, {
   SettingsContent,
   SettingsEntryObject,
   normalizeSettingsContent,
-} from "@/models/app-settings.model";
+} from "../../models/app-settings.model";
 
 const PREDEFINED_SECTIONS: SettingsSection[] = ["contact", "about", "operations"];
 

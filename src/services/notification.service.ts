@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import { emitSocketFallback, SocketFallbackOptions } from '@/realtime/socket.instance';
+import { emitSocketFallback, SocketFallbackOptions } from '../realtime/socket.instance';
 
 type ServiceAccountConfig = {
   projectId: string;
