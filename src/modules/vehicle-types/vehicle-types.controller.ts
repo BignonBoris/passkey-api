@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import VehicleType from "@/models/vehicle-type.model";
-import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
-import DriverRevenueConfig from "@/models/driver-revenue-config.model";
-import { resolveCountryId } from "@/services/country.service";
+import VehicleType from "../../models/vehicle-type.model";
+import VehiclePricingConfig from "../../models/vehicle-pricing-config.model";
+import DriverRevenueConfig from "../../models/driver-revenue-config.model";
+import { resolveCountryId } from "../../services/country.service";
 
 function slugifyVehicleTypeCode(value: string) {
   return value

@@ -1,21 +1,21 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
 
-import sequelize from "@/config/database";
-import User from "@/models/user.model";
-import StatusHistory from "@/models/status-history.model";
-import Order from "@/models/order.model";
-import Payment from "@/models/payment.model";
-import Payout from "@/models/payout.model";
-import KycRequest from "@/models/kyc-request.model";
-import DriverDocument from "@/models/driver-document.model";
-import SupportTicket from "@/models/support-ticket.model";
-import NotificationLog from "@/models/notification-log.model";
-import RefundRequest from "@/models/refund-request.model";
-import Promotion from "@/models/promotion.model";
-import PromotionRedemption from "@/models/promotion-redemption.model";
-import Incident from "@/models/incident.model";
-import ServiceZone from "@/models/service-zone.model";
+import sequelize from "../../config/database";
+import User from "../../models/user.model";
+import StatusHistory from "../../models/status-history.model";
+import Order from "../../models/order.model";
+import Payment from "../../models/payment.model";
+import Payout from "../../models/payout.model";
+import KycRequest from "../../models/kyc-request.model";
+import DriverDocument from "../../models/driver-document.model";
+import SupportTicket from "../../models/support-ticket.model";
+import NotificationLog from "../../models/notification-log.model";
+import RefundRequest from "../../models/refund-request.model";
+import Promotion from "../../models/promotion.model";
+import PromotionRedemption from "../../models/promotion-redemption.model";
+import Incident from "../../models/incident.model";
+import ServiceZone from "../../models/service-zone.model";
 
 const TREND_WINDOW_DAYS = 7;
 

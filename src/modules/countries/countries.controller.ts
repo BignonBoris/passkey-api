@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
-import Country from "@/models/country.model";
-import User from "@/models/user.model";
+import Country from "../../models/country.model";
+import User from "../../models/user.model";
 import {
   findCountryByIdOrCode,
   resolveCountryFromCoordinates,
   resolveCountryId,
-} from "@/services/country.service";
+} from "../../services/country.service";
 
 function parseCoordinate(value: unknown) {
   const parsed = Number(value);

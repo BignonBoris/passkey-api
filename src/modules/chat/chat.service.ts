@@ -1,8 +1,8 @@
 import { Op } from "sequelize";
-import ChatConversation from "@/models/chat-conversation.model";
-import ChatMessage from "@/models/chat-message.model";
-import User from "@/models/user.model";
-import Order from "@/models/order.model";
+import ChatConversation from "../../models/chat-conversation.model";
+import ChatMessage from "../../models/chat-message.model";
+import User from "../../models/user.model";
+import Order from "../../models/order.model";
 
 function normalizeRole(role: string | undefined | null): string {
   return (role || "").trim().toLowerCase();

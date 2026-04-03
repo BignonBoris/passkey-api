@@ -1,7 +1,7 @@
 import { DataTypes, Model } from "sequelize";
 import { randomBytes } from 'crypto';
 import sequelize from "../config/database";
-import { DEFAULT_COUNTRY_ID } from "@/constants/countries";
+import { DEFAULT_COUNTRY_ID } from "../constants/countries";
 
 class Country extends Model {
   public id!: string;

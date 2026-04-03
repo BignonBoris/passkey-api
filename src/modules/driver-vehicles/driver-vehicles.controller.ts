@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
-import DriverVehicle from "@/models/driver-vehicle.model";
+import DriverVehicle from "../../models/driver-vehicle.model";
 
 export async function listDriverVehicles(req: Request, res: Response) {
   try {

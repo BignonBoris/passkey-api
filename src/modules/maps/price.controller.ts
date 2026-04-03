@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
-import VehiclePricingConfig from '@/models/vehicle-pricing-config.model';
-import VehicleType from '@/models/vehicle-type.model';
+import VehiclePricingConfig from '../../models/vehicle-pricing-config.model';
+import VehicleType from '../../models/vehicle-type.model';
 import { getRouteDetails } from './maps.service';
-import { resolveCountryFromCoordinates } from '@/services/country.service';
+import { resolveCountryFromCoordinates } from '../../services/country.service';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
   moto: 0.8,
