@@ -1,6 +1,6 @@
 import axios from "axios";
-import Payment from "../models/payment.model";
-import User from "../models/user.model";
+import Payment from "@/models/payment.model";
+import User from "@/models/user.model";
 
 type FedaPayTransaction = {
   id: number | string;

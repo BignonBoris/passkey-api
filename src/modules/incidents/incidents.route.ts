@@ -6,8 +6,8 @@ import {
   updateIncident,
   deleteIncident,
 } from "./incidents.controller";
-import { authenticate, authorize } from "../../middlewares/auth.middleware";
-import { PRIVILEGED_ROLES } from "../../constants/roles";
+import { authenticate, authorize } from "@/middlewares/auth.middleware";
+import { PRIVILEGED_ROLES } from "@/constants/roles";
 
 const router = express.Router();
 

@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { Op, WhereOptions } from "sequelize";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import UserAddress from "../../models/user-address.model";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import UserAddress from "@/models/user-address.model";
 
 function normalizeAddress(address: UserAddress) {
   return {

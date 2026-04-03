@@ -1,4 +1,4 @@
-import PricingRule, { PricingRuleType } from "../models/pricing-rule.model";
+import PricingRule, { PricingRuleType } from "@/models/pricing-rule.model";
 
 export interface PricingRulePayload {
   countryId?: string;

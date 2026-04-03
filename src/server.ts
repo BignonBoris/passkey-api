@@ -371,11 +371,11 @@ async function cleanupVehiclePricingConstraints() {
     // Cela résoud l'erreur ER_CANT_DROP_FIELD_OR_KEY sur les FK/index mal nommés.
     const [countRes] = await sequelize.query("SELECT COUNT(*) as count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'VehiclePricingConfig'");
     if (Array.isArray(countRes) && countRes.length > 0 && (countRes[0] as any).count > 0) {
-      // On ne drop que si on est sur que c'est safe ou si on force.
-      // Ici on tente un drop direct car on a vu que count=0.
-      await sequelize.query("DROP TABLE IF EXISTS \`VehiclePricingConfig\`");
-      await sequelize.query("DROP TABLE IF EXISTS \`DriverRevenueConfig\`");
-      console.log("[migration] Tables VehiclePricingConfig et DriverRevenueConfig supprimées pour reconstruction.");
+       // On ne drop que si on est sur que c'est safe ou si on force.
+       // Ici on tente un drop direct car on a vu que count=0.
+       await sequelize.query("DROP TABLE IF EXISTS \`VehiclePricingConfig\`");
+       await sequelize.query("DROP TABLE IF EXISTS \`DriverRevenueConfig\`");
+       console.log("[migration] Tables VehiclePricingConfig et DriverRevenueConfig supprimées pour reconstruction.");
     }
   } catch (err) {
     console.warn("[migration] cleanupVehiclePricingConstraints skipped:", err);
@@ -1380,14 +1380,14 @@ async function ensureDefaultAppSettings() {
 }
 
 
-async function resetDatabase() {
-  try {
-    // ATTENTION : force: true supprime toutes les données !
-    await sequelize.sync({ force: true });
-    console.log("✅ Base de données réinitialisée et tables recréées !");
-  } catch (error) {
-    console.error("❌ Erreur lors de la réinitialisation :", error);
-  }
-}
+// async function resetDatabase() {
+//   try {
+//     // ATTENTION : force: true supprime toutes les données !
+//     await sequelize.sync({ force: true });
+//     console.log("✅ Base de données réinitialisée et tables recréées !");
+//   } catch (error) {
+//     console.error("❌ Erreur lors de la réinitialisation :", error);
+//   }
+// }
 
-resetDatabase();
+// resetDatabase();

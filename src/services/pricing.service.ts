@@ -1,7 +1,7 @@
-import VehiclePricingConfig from "../models/vehicle-pricing-config.model";
-import DriverRevenueConfig from "../models/driver-revenue-config.model";
-import PricingRule, { PricingRuleType, PricingAdjustmentType } from "../models/pricing-rule.model";
-import { calculateDriverRevenue, RevenueCalculationInput, RevenueCalculationResult } from "../services/revenue.service";
+import VehiclePricingConfig from "@/models/vehicle-pricing-config.model";
+import DriverRevenueConfig from "@/models/driver-revenue-config.model";
+import PricingRule, { PricingRuleType, PricingAdjustmentType } from "@/models/pricing-rule.model";
+import { calculateDriverRevenue, RevenueCalculationInput, RevenueCalculationResult } from "@/services/revenue.service";
 
 export interface PricingCalculationInput {
   vehicleType: string;

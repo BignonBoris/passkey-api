@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
-import { JWT_SECRET, JWT_EXPIRES_IN } from "../../../config/jwt";
-import { UserRepository } from "../../../repositories/user.repository";
-import User from "../../../models/user.model";
-import { nomalizeCustomerPhone } from "../../../utils/phoneNormalize";
+import { JWT_SECRET, JWT_EXPIRES_IN } from "@/config/jwt";
+import { UserRepository } from "@/repositories/user.repository";
+import User from "@/models/user.model";
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
 
 export class VerifyOtpService {
   static async verifyOTP(phone: string, role: string, otp: string) {

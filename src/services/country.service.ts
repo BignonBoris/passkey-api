@@ -1,5 +1,5 @@
-import Country from "../models/country.model";
-import { DEFAULT_COUNTRIES, DEFAULT_COUNTRY_ID } from "../constants/countries";
+import Country from "@/models/country.model";
+import { DEFAULT_COUNTRIES, DEFAULT_COUNTRY_ID } from "@/constants/countries";
 import { Op } from "sequelize";
 
 function normalizeCountryLookup(value?: string | null) {

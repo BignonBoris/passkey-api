@@ -1,11 +1,11 @@
 import "dotenv/config";
-import { generateOTP } from "../../../utils/otp";
-import { UserService } from "../../../modules/users/user.service";
+import { generateOTP } from "@/utils/otp";
+import { UserService } from "@/modules/users/user.service";
 import bcrypt from "bcrypt";
-import { UserRepository } from "../../../repositories/user.repository";
-import User from '../../../models/user.model';
-import { nomalizeCustomerPhone } from "../../../utils/phoneNormalize";
-import { SmsService } from "../../../services/sms/sms.service";
+import { UserRepository } from "@/repositories/user.repository";
+import User from '@/models/user.model';
+import { nomalizeCustomerPhone } from "@/utils/phoneNormalize";
+import { SmsService } from "@/services/sms/sms.service";
 
 export class LoginService {
   static async login(phone: string, password: string, role: string) {

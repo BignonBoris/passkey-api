@@ -1,8 +1,8 @@
 import { Response } from "express";
 import { Server } from "socket.io";
-import { AuthenticatedRequest } from "../../types/auth-request";
-import User from "../../models/user.model";
-import { sendPushNotification } from "../../services/notification.service";
+import { AuthenticatedRequest } from "@/types/auth-request";
+import User from "@/models/user.model";
+import { sendPushNotification } from "@/services/notification.service";
 import {
   createChatMessage,
   getOrCreateConversationForParticipants,

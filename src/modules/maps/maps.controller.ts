@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { findCountryByIdOrCode, resolveCountryFromCoordinates } from '../../services/country.service';
+import { findCountryByIdOrCode, resolveCountryFromCoordinates } from '@/services/country.service';
 
 dotenv.config();
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;

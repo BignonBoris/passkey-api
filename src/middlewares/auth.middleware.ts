@@ -1,8 +1,8 @@
 import { NextFunction, Response } from "express";
 import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../config/jwt";
-import { isUserRole, UserRole } from "../constants/roles";
-import { AuthenticatedRequest } from "../types/auth-request";
+import { JWT_SECRET } from "@/config/jwt";
+import { isUserRole, UserRole } from "@/constants/roles";
+import { AuthenticatedRequest } from "@/types/auth-request";
 
 interface JwtPayload {
   id?: string;

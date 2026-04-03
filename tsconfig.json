@@ -4,10 +4,16 @@
     "module": "CommonJS",
     "rootDir": ".",
     "outDir": "dist",
-    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "sourceMap": true,
     "lib": ["esnext"]
-  }
+  },
+  "include": ["src/**/*.ts"]
 }

@@ -1,4 +1,4 @@
-import { authenticate } from "../../middlewares/auth.middleware";
+import { authenticate } from "@/middlewares/auth.middleware";
 import {
   createOrderPaymentCheckout,
   selectOrderCashPayment,
