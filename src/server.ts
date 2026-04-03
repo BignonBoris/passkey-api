@@ -66,6 +66,15 @@ function shouldRunSchemaBootstrap() {
   return process.env.NODE_ENV !== "production";
 }
 
+async function shouldRunInitialSchemaSync() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tablesRaw = await queryInterface.showAllTables();
+  const tables = tablesRaw.map((table: any) => (typeof table === "string" ? table : String(Object.values(table)[0] || "")));
+  const knownAppTables = ["User", "Order", "Payment", "Country"];
+
+  return !knownAppTables.some((tableName) => tables.includes(tableName));
+}
+
 async function startServer() {
   try {
     await sequelize.authenticate();
@@ -74,8 +83,12 @@ async function startServer() {
       // Reserved for empty/local databases. Disabled by default in production.
       await ensureCountryColumnsExist();
       await ensureRiderColumnsExist();
-      await cleanupVehiclePricingConstraints();
-      await sequelize.sync();
+      if (await shouldRunInitialSchemaSync()) {
+        await cleanupVehiclePricingConstraints();
+        await sequelize.sync();
+      } else {
+        console.log("[database] Existing schema detected. Skipping sequelize.sync() and running incremental migrations only.");
+      }
       await ensureCountrySchema();
       await ensureCountryDistanceColumns();
       await ensureDefaultCountries();
