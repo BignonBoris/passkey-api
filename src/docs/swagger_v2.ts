@@ -4,12 +4,16 @@ export const swaggerSpec = swaggerJsdoc({
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "e-Cheetah API",
+      title: "PassKey API",
       version: "1.0.0",
       description: "Super-app Mobility & Delivery API",
     },
 
     servers: [
+      {
+        url: "https://passkey-api.onrender.com/api",
+        description: "Render server",
+      },
       {
         url: "http://localhost:3000/api",
         description: "Local server",

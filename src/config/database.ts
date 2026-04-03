@@ -14,14 +14,21 @@ const commonOptions = {
 const sequelize = process.env.DATABASE_URL
   ? new Sequelize(process.env.DATABASE_URL, commonOptions)
   : new Sequelize(
-      process.env.DATABASE_NAME || "",
-      process.env.DATABASE_USER || "",
-      process.env.DATABASE_PASSWORD || "",
-      {
-        ...commonOptions,
-        host: process.env.DATABASE_HOST || "",
-        port: Number(process.env.DATABASE_PORT) || 3306,
-      }
-    );
+    process.env.DATABASE_NAME || "",
+    process.env.DATABASE_USER || "",
+    process.env.DATABASE_PASSWORD || "",
+    {
+      ...commonOptions,
+      host: process.env.DATABASE_HOST || "",
+      port: Number(process.env.DATABASE_PORT) || 3306,
+      dialect: 'mysql',
+      dialectOptions: {
+        ssl: {
+          rejectUnauthorized: false, // Nécessaire pour les connexions SSL Aiven
+        }
+      },
+      logging: false,
+    }
+  );
 
 export default sequelize;
