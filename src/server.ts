@@ -50,42 +50,60 @@ import { ensureDefaultCountries } from "./services/country.service";
 // const PORT = process.env.PORT || 3000;
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+function isTruthy(value?: string) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function shouldRunSchemaBootstrap() {
+  if (process.env.DB_BOOTSTRAP_ON_START !== undefined) {
+    return isTruthy(process.env.DB_BOOTSTRAP_ON_START);
+  }
+
+  if (process.env.DB_SYNC_ON_START !== undefined) {
+    return isTruthy(process.env.DB_SYNC_ON_START);
+  }
+
+  return process.env.NODE_ENV !== "production";
+}
+
 async function startServer() {
   try {
-    // 1. First ensure critical columns exist in tables that might already be there
-    // without the countryId field (which causes sync errors on unique indexes)
-    await ensureCountryColumnsExist();
-    await ensureRiderColumnsExist();
-    await cleanupVehiclePricingConstraints();
+    await sequelize.authenticate();
 
-    // 2. Sync all models/indexes
-    await sequelize.sync();
+    if (shouldRunSchemaBootstrap()) {
+      // Reserved for empty/local databases. Disabled by default in production.
+      await ensureCountryColumnsExist();
+      await ensureRiderColumnsExist();
+      await cleanupVehiclePricingConstraints();
+      await sequelize.sync();
+      await ensureCountrySchema();
+      await ensureCountryDistanceColumns();
+      await ensureDefaultCountries();
+      await ensureUserLocationSchema();
+      await ensureUserPhoneNullable();
+      await ensureOrderArchiveColumn();
+      await ensureOrderOtpColumns();
+      await ensureOrderRevenueColumns();
+      await ensureOrderPricingColumns();
+      await ensureFoodOrderColumns();
+      await ensurePricingRulesTable();
+      await ensurePaymentSchema();
+      await ensureSupportSchema();
+      await seedSupportTicketCategories();
+      await ensureFoodCatalogSchema();
+      await seedVehicleTypes();
+      await ensureDefaultAppSettings();
+      await seedDefaultAdmin();
+      await seedFoodHomeData();
+    } else {
+      console.log("[database] Schema bootstrap disabled. Using existing database schema.");
+    }
 
-    // 3. Complete the rest of the schema adjustments
-    await ensureCountrySchema();
-    await ensureCountryDistanceColumns();
-    await ensureDefaultCountries();
-    await ensureUserLocationSchema();
-    await ensureUserPhoneNullable();
-    await ensureOrderArchiveColumn();
-    await ensureOrderOtpColumns();
-    await ensureOrderRevenueColumns();
-    await ensureOrderPricingColumns();
-    await ensureFoodOrderColumns();
-    await ensurePricingRulesTable();
-    await ensurePaymentSchema();
-    await ensureSupportSchema();
-    await seedSupportTicketCategories();
-    await ensureFoodCatalogSchema();
-    await seedVehicleTypes();
-    await ensureDefaultAppSettings();
-    await seedDefaultAdmin();
-    await seedFoodHomeData();
     server.listen(PORT, () => {
       console.log(`API running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error("Database sync failed:", error);
+    console.error("Server startup failed:", error);
   }
 }
 

@@ -23,6 +23,8 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: DB_BOOTSTRAP_ON_START
+        value: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
