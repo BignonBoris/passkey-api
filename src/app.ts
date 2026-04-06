@@ -77,6 +77,18 @@ io.on("connection", (socket) => {
     console.log(`Socket ${socket.id} a rejoint la salle: ${room}`);
   });
 
+  socket.on("leave_driver_room", () => {
+    socket.leave("drivers");
+    socket.leave("role_courier");
+    console.log(`Socket ${socket.id} a quitte la salle des livreurs`);
+  });
+
+  socket.on("leave_room", (room: string) => {
+    if (!room) return;
+    socket.leave(room);
+    console.log(`Socket ${socket.id} a quitte la salle: ${room}`);
+  });
+
   socket.on("rider_call_driver", (payload: any) => {
     const driverId = String(payload?.driverId || "").trim();
     const callerId = String(payload?.callerId || "").trim();
@@ -85,10 +97,12 @@ io.on("connection", (socket) => {
     const eventPayload = {
       driverId,
       callerId,
+      customerId: callerId,
       callerName: String(payload?.callerName || "Usager"),
       callerPhone: String(payload?.callerPhone || ""),
       message: String(payload?.message || "Nouvel appel usager"),
       orderId: String(payload?.orderId || ""),
+      requestId: String(payload?.requestId || payload?.orderId || ""),
       pickupAddress: String(payload?.pickupAddress || ""),
       destinationAddress: String(payload?.destinationAddress || ""),
       distance: String(payload?.distance || ""),
@@ -106,6 +120,9 @@ io.on("connection", (socket) => {
     io.to(`user_${callerId}`).emit("driver:call_status", {
       status: "sent",
       driverId,
+      callerId,
+      orderId: eventPayload.orderId,
+      requestId: eventPayload.requestId,
       createdAt: new Date().toISOString(),
     });
   });
@@ -119,6 +136,9 @@ io.on("connection", (socket) => {
     io.to(`user_${callerId}`).emit("driver:call_status", {
       status: decision,
       driverId,
+      callerId,
+      orderId: String(payload?.orderId || ""),
+      requestId: String(payload?.requestId || payload?.orderId || ""),
       createdAt: payload?.createdAt || new Date().toISOString(),
     });
   });

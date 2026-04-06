@@ -10,6 +10,7 @@ import { sendPushNotification } from "../../services/notification.service";
 import { emitUserLocationUpdated } from "../../realtime/location.events";
 import { resolveCountryFromCoordinates } from "../../services/country.service";
 import Country from "../../models/country.model";
+import DriverAccount from "../../models/driver-account.model";
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -292,7 +293,8 @@ export const getUsers = async (req: Request, res: Response) => {
     const users = await User.findAll({
       where: whereClause,
       include: [
-        { model: Country, as: 'country', attributes: ['id', 'name'] }
+        { model: Country, as: 'country', attributes: ['id', 'name'] },
+        { model: DriverAccount, as: 'account', attributes: ['balance'] }
       ],
       attributes: { exclude: ['password'] }, // Sécurité : on n'envoie jamais le mot de passe
       order: [['createdAt', 'DESC']]

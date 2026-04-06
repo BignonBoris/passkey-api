@@ -174,6 +174,50 @@ function hasUsableFcmToken(value: unknown): boolean {
   return token !== "" && token !== "null" && token !== "undefined";
 }
 
+function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) {
+  const orderId = String(order.get('id') || '').trim();
+  const userId = String(order.get('userId') || '').trim();
+  const pickupCoords = parseLatLng(String(order.get('pickupLocation') || ''));
+  const destinationCoords = parseLatLng(String(order.get('destinationLocation') || ''));
+
+  return {
+    type: "NEW_DELIVERY_REQUEST",
+    requestId: orderId,
+    orderId,
+    id: orderId,
+    order: orderId,
+    callerId: userId,
+    customerId: userId,
+    userId,
+    pickupAddress: String(order.get('pickupAddress') || ''),
+    deliveryAddress: String(order.get('destinationAddress') || ''),
+    destinationAddress: String(order.get('destinationAddress') || ''),
+    price: String(order.get('price') || ''),
+    distance: String(order.get('distance') || ''),
+    vehicleType: String(order.get('vehicleType') || ''),
+    vehicleName: String(order.get('vehicleType') || ''),
+    pickupLocation: String(order.get('pickupLocation') || ''),
+    destinationLocation: String(order.get('destinationLocation') || ''),
+    pickupLat: pickupCoords ? String(pickupCoords.lat) : '',
+    pickupLng: pickupCoords ? String(pickupCoords.lng) : '',
+    destinationLat: destinationCoords ? String(destinationCoords.lat) : '',
+    destinationLng: destinationCoords ? String(destinationCoords.lng) : '',
+    payment_method: String(paymentRow?.get("method") || "CASH"),
+    payment_status: String(paymentRow?.get("status") || "PENDING"),
+    paymentMethod: String(paymentRow?.get("method") || "CASH"),
+    paymentStatus: String(paymentRow?.get("status") || "PENDING"),
+    parcel_nature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
+    parcelNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
+    packageNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
+    packageDescription: String(order.get('packageDescription') || order.get('parcelNature') || ''),
+    customerName: 'Client PassKey',
+    customerPhone: '',
+    status: String(order.get('status') || 'PENDING'),
+    createdAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
+  };
+}
+
 async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, paymentRow: any) {
   const pickup = parseLatLng(String(order.get('pickupLocation')));
   if (!pickup) return;
@@ -198,7 +242,6 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
 
   const nearbyDrivers = drivers.filter(d => {
     if (!isTruthyAvailability(d.get('isAvailable'))) return false;
-    if (!hasUsableFcmToken(d.get('fcmToken'))) return false;
 
     // TODO: [TEST] Condition de position GPS désactivée pour les tests
     // if (d.get('latitude') == null || d.get('longitude') == null) return false;
@@ -218,76 +261,25 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
 
   console.log(`[RÉSULTAT] ${nearbyDrivers.length} livreurs vont recevoir l'appel de course.\n`);
 
-  const pickupCoords = parseLatLng(String(order.get('pickupLocation') || ''));
-  const destinationCoords = parseLatLng(String(order.get('destinationLocation') || ''));
-
-  const socketPayload = {
-    orderId: order.get('id'),
-    pickupAddress: order.get('pickupAddress'),
-    deliveryAddress: order.get('destinationAddress'),
-    destinationAddress: order.get('destinationAddress'),
-    price: order.get('price'),
-    distance: order.get('distance'),
-    vehicleType: order.get('vehicleType'),
-    pickupLocation: String(order.get('pickupLocation') || ''),
-    destinationLocation: String(order.get('destinationLocation') || ''),
-    pickupLat: pickupCoords?.lat ?? null,
-    pickupLng: pickupCoords?.lng ?? null,
-    destinationLat: destinationCoords?.lat ?? null,
-    destinationLng: destinationCoords?.lng ?? null,
-    payment_method: String(paymentRow?.get("method") || "CASH"),
-    payment_status: String(paymentRow?.get("status") || "PENDING"),
-    paymentMethod: String(paymentRow?.get("method") || "CASH"),
-    paymentStatus: String(paymentRow?.get("status") || "PENDING"),
-    parcel_nature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-    parcelNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-    packageNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-    packageDescription: String(order.get('packageDescription') || order.get('parcelNature') || ''),
-    userId: order.get('userId'),
-    customerName: 'Client PassKey',
-    timestamp: new Date(),
-  };
+  const deliveryRequestPayload = buildDriverDeliveryRequestPayload(order, paymentRow);
 
   const pushPromises = nearbyDrivers.map(d => {
     const driverId = String(d.get('id') || '').trim();
     const fcmToken = String(d.get('fcmToken') || '').trim();
-    if (!driverId || !fcmToken) return Promise.resolve();
+    if (!driverId) return Promise.resolve();
 
-    io.to(`user_${driverId}`).emit('new_ride_request', socketPayload);
+    io.to(`user_${driverId}`).emit('new_delivery_request', deliveryRequestPayload);
+    io.to(`user_${driverId}`).emit('new_ride_request', deliveryRequestPayload);
+
+    if (!hasUsableFcmToken(fcmToken)) {
+      return Promise.resolve();
+    }
 
     return sendPushNotification(
       fcmToken,
       "Nouvelle course disponible",
       `Course de ${order.get('price')} FCFA vers ${order.get('destinationAddress')}`,
-      {
-        type: "NEW_DELIVERY_REQUEST",
-        orderId: String(order.get('id')),
-        id: String(order.get('id')),
-        userId: String(order.get('userId') || ''),
-        pickupAddress: String(order.get('pickupAddress')),
-        pickupLocation: String(order.get('pickupLocation') || ''),
-        pickupLat: pickupCoords ? String(pickupCoords.lat) : '',
-        pickupLng: pickupCoords ? String(pickupCoords.lng) : '',
-        destinationAddress: String(order.get('destinationAddress')),
-        deliveryAddress: String(order.get('destinationAddress')),
-        destinationLocation: String(order.get('destinationLocation') || ''),
-        destinationLat: destinationCoords ? String(destinationCoords.lat) : '',
-        destinationLng: destinationCoords ? String(destinationCoords.lng) : '',
-        price: String(order.get('price')),
-        distance: String(order.get('distance') || ''),
-        vehicleName: String(order.get('vehicleType') || ''),
-        vehicleType: String(order.get('vehicleType') || ''),
-        paymentMethod: String(paymentRow?.get("method") || "CASH"),
-        payment_method: String(paymentRow?.get("method") || "CASH"),
-        paymentStatus: String(paymentRow?.get("status") || "PENDING"),
-        payment_status: String(paymentRow?.get("status") || "PENDING"),
-        parcelNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-        parcel_nature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-        packageNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
-        packageDescription: String(order.get('packageDescription') || order.get('parcelNature') || ''),
-        customerName: 'Client PassKey',
-        customerPhone: '',
-      }
+      deliveryRequestPayload
     );
   });
 
@@ -439,7 +431,11 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const io: Server = (req as any).io;
     const payload = { orderId, status, driverId: driverId || order.get('driverId'), payment_method: paymentMethod, payment_status: paymentStatus };
     io.to(`user_${order.get('userId')}`).emit('order_status_changed', payload);
-    if (status === 'ACCEPTED') io.to('drivers').emit('CANCEL_INCOMING_CALL', { orderId });
+    if (status === 'ACCEPTED') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+      orderId,
+      requestId: orderId,
+      acceptedByDriverId: String(driverId || order.get('driverId') || ''),
+    });
     if (status === "COMPLETED") await notifyUserDeliveryStep(order, { title: "Livraison terminee", body: "Merci!", type: "ORDER_COMPLETED" });
     if (status === "ACCEPTED") {
       await notifyUserDeliveryStep(order, {
@@ -485,7 +481,88 @@ export const submitOrderRating = async (req: AuthenticatedRequest, res: Response
         };
       }
 
-      const orderOwnerId = String(order.get("userId") || "");
+      const orderOwnerId = String(order.get("userId") || "").trim();
+      const driverId = String(order.get("driverId") || "").trim();
+
+      if (requesterRole === "livreur") {
+        if (driverId !== requesterId) {
+          return {
+            status: 403,
+            body: { success: false, message: "Vous ne pouvez noter que les clients de vos propres courses" },
+          };
+        }
+
+        if (order.get("userRating") != null) {
+          return {
+            status: 409,
+            body: {
+              success: false,
+              message: "Cette course a deja ete notee",
+              data: {
+                orderId: String(order.get("id") || ""),
+                rating: Number(order.get("userRating")),
+                comment: String(order.get("userRatingComment") || ""),
+                ratedAt: order.get("userRatedAt"),
+              },
+            },
+          };
+        }
+
+        if (!orderOwnerId) {
+          return {
+            status: 400,
+            body: { success: false, message: "Aucun client n'est associe a cette course" },
+          };
+        }
+
+        const user = await User.findByPk(orderOwnerId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!user) {
+          return { status: 404, body: { success: false, message: "Client introuvable" } };
+        }
+
+        const currentRating = Number(user.get("rating") || 0);
+        const currentRatingCount = Number(user.get("ratingCount") || 0);
+        const nextRatingCount = currentRatingCount + 1;
+        const nextRating =
+          Math.round((((currentRating * currentRatingCount) + rating) / nextRatingCount) * 100) / 100;
+        const ratedAt = new Date();
+
+        await order.update(
+          {
+            userRating: rating,
+            userRatingComment: comment || null,
+            userRatedAt: ratedAt,
+            ratedByDriverId: requesterId,
+          },
+          { transaction }
+        );
+
+        await user.update(
+          {
+            rating: nextRating,
+            ratingCount: nextRatingCount,
+          },
+          { transaction }
+        );
+
+        return {
+          status: 200,
+          body: {
+            success: true,
+            message: "Note enregistree avec succes",
+            data: {
+              orderId: String(order.get("id") || ""),
+              userId: orderOwnerId,
+              submittedRating: rating,
+              comment,
+              ratedAt,
+              userRating: nextRating,
+              userRatingCount: nextRatingCount,
+            },
+          },
+        };
+      }
+
       if (requesterRole !== "admin" && orderOwnerId !== requesterId) {
         return {
           status: 403,
@@ -509,7 +586,6 @@ export const submitOrderRating = async (req: AuthenticatedRequest, res: Response
         };
       }
 
-      const driverId = String(order.get("driverId") || "").trim();
       if (!driverId) {
         return {
           status: 400,
@@ -669,7 +745,11 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       completionOtp: order.get('completionOtp'),
       payment_method: String((await getOrderPaymentSnapshot(orderId)).paymentMethod || "CASH"),
     });
-    io.to('drivers').emit('CANCEL_INCOMING_CALL', { orderId });
+    io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+      orderId,
+      requestId: orderId,
+      acceptedByDriverId: String(driverId || ''),
+    });
 
     await notifyUserDeliveryStep(order, {
       title: "Livreur trouvé",

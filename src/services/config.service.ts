@@ -1,4 +1,5 @@
 import PricingRule, { PricingRuleType } from "../models/pricing-rule.model";
+import Country from "../models/country.model";
 
 export interface PricingRulePayload {
   countryId?: string;
@@ -21,6 +22,13 @@ export async function listPricingRules(type?: PricingRuleType, countryId?: strin
   if (countryId) where.countryId = countryId;
   return PricingRule.findAll({
     where,
+    include: [
+      {
+        model: Country,
+        as: "country",
+        attributes: ["name"],
+      },
+    ],
     order: [["priority", "DESC"], ["updatedAt", "DESC"]],
   });
 }

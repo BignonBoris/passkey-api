@@ -67,11 +67,11 @@ ChatMessage.init(
   }
 );
 
-ChatConversation.hasMany(ChatMessage, { foreignKey: "conversationId", as: "messages", constraints: false });
-ChatMessage.belongsTo(ChatConversation, { foreignKey: "conversationId", as: "conversation", constraints: false });
-User.hasMany(ChatMessage, { foreignKey: "senderId", as: "sentMessages", constraints: false });
-User.hasMany(ChatMessage, { foreignKey: "recipientId", as: "receivedMessages", constraints: false });
-ChatMessage.belongsTo(User, { foreignKey: "senderId", as: "sender", constraints: false });
-ChatMessage.belongsTo(User, { foreignKey: "recipientId", as: "recipient", constraints: false });
+ChatConversation.hasMany(ChatMessage, { foreignKey: "conversationId", as: "messages" });
+ChatMessage.belongsTo(ChatConversation, { foreignKey: "conversationId", as: "conversation" });
+User.hasMany(ChatMessage, { foreignKey: "senderId", as: "sentMessages" });
+User.hasMany(ChatMessage, { foreignKey: "recipientId", as: "receivedMessages" });
+ChatMessage.belongsTo(User, { foreignKey: "senderId", as: "sender" });
+ChatMessage.belongsTo(User, { foreignKey: "recipientId", as: "recipient" });
 
 export default ChatMessage;

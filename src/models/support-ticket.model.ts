@@ -68,11 +68,11 @@ SupportTicket.init(
   }
 );
 
-User.hasMany(SupportTicket, { foreignKey: "userId", as: "supportTickets", constraints: false });
-SupportTicket.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
-User.hasMany(SupportTicket, { foreignKey: "assignedTo", as: "assignedSupportTickets", constraints: false });
-SupportTicket.belongsTo(User, { foreignKey: "assignedTo", as: "assignedAdmin", constraints: false });
-Order.hasMany(SupportTicket, { foreignKey: "orderId", as: "supportTickets", constraints: false });
-SupportTicket.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
+User.hasMany(SupportTicket, { foreignKey: "userId", as: "supportTickets" });
+SupportTicket.belongsTo(User, { foreignKey: "userId", as: "user" });
+User.hasMany(SupportTicket, { foreignKey: "assignedTo", as: "assignedSupportTickets" });
+SupportTicket.belongsTo(User, { foreignKey: "assignedTo", as: "assignedAdmin" });
+Order.hasMany(SupportTicket, { foreignKey: "orderId", as: "supportTickets" });
+SupportTicket.belongsTo(Order, { foreignKey: "orderId", as: "order" });
 
 export default SupportTicket;

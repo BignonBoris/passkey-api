@@ -134,6 +134,15 @@ export const sendNotificationToDriver = async (
       title,
       body,
     },
+    android: {
+      priority: "high" as const,
+      notification: {
+        channelId: "incoming_delivery_calls",
+        priority: "max" as const,
+        defaultSound: true,
+        sound: "default",
+      },
+    },
     data,
     token: normalizedToken,
   };
@@ -169,6 +178,15 @@ export const sendPushNotification = async (
     notification: {
       title,
       body,
+    },
+    android: {
+      priority: "high" as const,
+      notification: {
+        channelId: "incoming_delivery_calls",
+        priority: "max" as const,
+        defaultSound: true,
+        sound: "default",
+      },
     },
     data,
     token: normalizedToken,

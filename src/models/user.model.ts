@@ -152,7 +152,7 @@ User.init({
     allowNull: true,
   },
   countryId: {
-    type: DataTypes.UUID,
+    type: DataTypes.STRING(16),
     allowNull: false,
     defaultValue: DEFAULT_COUNTRY_ID,
   }
@@ -169,7 +169,7 @@ User.init({
   ]
 });
 
-User.belongsTo(Country, { foreignKey: 'countryId', as: 'country', constraints: false });
-Country.hasMany(User, { foreignKey: 'countryId', as: 'users', constraints: false });
+User.belongsTo(Country, { foreignKey: 'countryId', as: 'country' });
+Country.hasMany(User, { foreignKey: 'countryId', as: 'users' });
 
 export default User;

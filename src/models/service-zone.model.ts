@@ -19,7 +19,7 @@ ServiceZone.init(
       primaryKey: true,
     },
     countryId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(16),
       allowNull: false,
       defaultValue: DEFAULT_COUNTRY_ID,
     },

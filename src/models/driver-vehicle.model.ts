@@ -65,7 +65,7 @@ DriverVehicle.init(
   }
 );
 
-User.hasMany(DriverVehicle, { foreignKey: "driverId", as: "vehicles", constraints: false });
-DriverVehicle.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
+User.hasMany(DriverVehicle, { foreignKey: "driverId", as: "vehicles" });
+DriverVehicle.belongsTo(User, { foreignKey: "driverId", as: "driver" });
 
 export default DriverVehicle;

@@ -45,6 +45,10 @@ class Order extends Model {
   public driverRatingComment?: string | null;
   public driverRatedAt?: Date | null;
   public ratedByUserId?: string | null;
+  public userRating?: number | null;
+  public userRatingComment?: string | null;
+  public userRatedAt?: Date | null;
+  public ratedByDriverId?: string | null;
   public isArchived!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -58,7 +62,7 @@ Order.init(
       primaryKey: true,
     },
     countryId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(16),
       allowNull: false,
       defaultValue: DEFAULT_COUNTRY_ID,
     },
@@ -189,6 +193,23 @@ Order.init(
       allowNull: true,
       references: { model: User, key: "id" },
     },
+    userRating: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    userRatingComment: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    userRatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    ratedByDriverId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: { model: User, key: "id" },
+    },
     vehicleType: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -257,9 +278,9 @@ Order.init(
   }
 );
 
-User.hasMany(Order, { foreignKey: "userId", as: "clientOrders", constraints: false });
-Order.belongsTo(User, { foreignKey: "userId", as: "client", constraints: false });
-User.hasMany(Order, { foreignKey: "driverId", as: "driverOrders", constraints: false });
-Order.belongsTo(User, { foreignKey: "driverId", as: "driver", constraints: false });
+User.hasMany(Order, { foreignKey: "userId", as: "clientOrders" });
+Order.belongsTo(User, { foreignKey: "userId", as: "client" });
+User.hasMany(Order, { foreignKey: "driverId", as: "driverOrders" });
+Order.belongsTo(User, { foreignKey: "driverId", as: "driver" });
 
 export default Order;

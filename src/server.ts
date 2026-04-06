@@ -31,6 +31,8 @@ import "./models/food-home-category.model";
 import "./models/food-home-promo.model";
 import "./models/food-home-restaurant.model";
 import "./models/food-home-product.model";
+import "./models/driver-account.model";
+import "./models/driver-funding-transaction.model";
 import AppSettings, { normalizeSettingsContent } from "./models/app-settings.model";
 import FoodHomeCategory from "./models/food-home-category.model";
 import FoodHomePromo from "./models/food-home-promo.model";
@@ -50,73 +52,41 @@ import { ensureDefaultCountries } from "./services/country.service";
 // const PORT = process.env.PORT || 3000;
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
-function isTruthy(value?: string) {
-  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
-}
-
-function shouldRunSchemaBootstrap() {
-  if (process.env.DB_BOOTSTRAP_ON_START !== undefined) {
-    return isTruthy(process.env.DB_BOOTSTRAP_ON_START);
-  }
-
-  if (process.env.DB_SYNC_ON_START !== undefined) {
-    return isTruthy(process.env.DB_SYNC_ON_START);
-  }
-
-  return false;
-}
-
-async function shouldRunInitialSchemaSync() {
-  const queryInterface = sequelize.getQueryInterface();
-  const tablesRaw = await queryInterface.showAllTables();
-  const tables = tablesRaw.map((table: any) => (typeof table === "string" ? table : String(Object.values(table)[0] || "")));
-  const knownAppTables = ["User", "Order", "Payment", "Country"];
-
-  return !knownAppTables.some((tableName) => tables.includes(tableName));
-}
-
 async function startServer() {
   try {
-    await sequelize.authenticate();
+    // 1. First ensure critical columns exist in tables that might already be there
+    // without the countryId field (which causes sync errors on unique indexes)
+    await ensureCountryColumnsExist();
+    await ensureRiderColumnsExist();
+    await cleanupVehiclePricingConstraints();
 
-    if (shouldRunSchemaBootstrap()) {
-      // Reserved for empty/local databases. Disabled by default in production.
-      await ensureCountryColumnsExist();
-      await ensureRiderColumnsExist();
-      if (await shouldRunInitialSchemaSync()) {
-        await cleanupVehiclePricingConstraints();
-        await sequelize.sync();
-      } else {
-        console.log("[database] Existing schema detected. Skipping sequelize.sync() and running incremental migrations only.");
-      }
-      await ensureCountrySchema();
-      await ensureCountryDistanceColumns();
-      await ensureDefaultCountries();
-      await ensureUserLocationSchema();
-      await ensureUserPhoneNullable();
-      await ensureOrderArchiveColumn();
-      await ensureOrderOtpColumns();
-      await ensureOrderRevenueColumns();
-      await ensureOrderPricingColumns();
-      await ensureFoodOrderColumns();
-      await ensurePricingRulesTable();
-      await ensurePaymentSchema();
-      await ensureSupportSchema();
-      await seedSupportTicketCategories();
-      await ensureFoodCatalogSchema();
-      await seedVehicleTypes();
-      await ensureDefaultAppSettings();
-      await seedDefaultAdmin();
-      await seedFoodHomeData();
-    } else {
-      console.log("[database] Schema bootstrap disabled. Using existing database schema.");
-    }
+    // 2. Sync all models/indexes
+    await sequelize.sync();
 
+    // 3. Complete the rest of the schema adjustments
+    await ensureCountrySchema();
+    await ensureCountryDistanceColumns();
+    await ensureDefaultCountries();
+    await ensureOrderArchiveColumn();
+    await ensureOrderOtpColumns();
+    await ensureOrderRevenueColumns();
+    await ensureOrderPricingColumns();
+    await ensureOrderRatingColumns();
+    await ensureFoodOrderColumns();
+    await ensurePricingRulesTable();
+    await ensurePaymentSchema();
+    await ensureSupportSchema();
+    await seedSupportTicketCategories();
+    await ensureFoodCatalogSchema();
+    await seedVehicleTypes();
+    await ensureDefaultAppSettings();
+    await seedDefaultAdmin();
+    await seedFoodHomeData();
     server.listen(PORT, () => {
       console.log(`API running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error("Server startup failed:", error);
+    console.error("Database sync failed:", error);
   }
 }
 
@@ -182,16 +152,46 @@ async function ensurePaymentSchema() {
 
 startServer();
 
-async function ensureUserLocationSchema() {
+async function ensureUserSchema() {
   const queryInterface = sequelize.getQueryInterface();
   const tableName = "User";
+  const tablesRaw = await queryInterface.showAllTables();
+  const tables = tablesRaw.map((table: any) => (typeof table === "string" ? table : String(Object.values(table)[0] || "")));
+  if (!tables.includes(tableName)) return;
+
   const columns = await queryInterface.describeTable(tableName);
 
-  if (!columns.locationUpdatedAt) {
-    await queryInterface.addColumn(tableName, "locationUpdatedAt", {
-      type: DataTypes.DATE,
-      allowNull: true,
-    });
+  const userColumns = [
+    { name: "locationUpdatedAt", definition: { type: DataTypes.DATE, allowNull: true } },
+    { name: "rating", definition: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 } },
+    { name: "ratingCount", definition: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 } },
+    { name: "identityVerified", definition: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false } },
+    { name: "hasSubmittedOnboarding", definition: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false } },
+    { name: "otpCode", definition: { type: DataTypes.STRING(6), allowNull: true } },
+    { name: "otpExpiresAt", definition: { type: DataTypes.DATE, allowNull: true } },
+    { name: "latitude", definition: { type: DataTypes.FLOAT, allowNull: true } },
+    { name: "longitude", definition: { type: DataTypes.FLOAT, allowNull: true } },
+    { name: "fcmToken", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "city", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "dateOfBirth", definition: { type: DataTypes.DATEONLY, allowNull: true } },
+    { name: "avatarUrl", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "accountStatus", definition: { type: DataTypes.ENUM("active", "suspended"), defaultValue: "active", allowNull: false } },
+    { name: "suspensionReason", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "suspendedAt", definition: { type: DataTypes.DATE, allowNull: true } },
+    { name: "suspendedBy", definition: { type: DataTypes.UUID, allowNull: true } },
+    { name: "reactivatedAt", definition: { type: DataTypes.DATE, allowNull: true } },
+    { name: "reactivatedBy", definition: { type: DataTypes.UUID, allowNull: true } },
+  ];
+
+  for (const col of userColumns) {
+    if (!columns[col.name]) {
+      try {
+        await queryInterface.addColumn(tableName, col.name, col.definition);
+        console.log(`[migration] Added ${col.name} to User`);
+      } catch (err) {
+        console.warn(`[migration] Could not add ${col.name} to User (might already exist):`, err);
+      }
+    }
   }
 }
 
@@ -965,6 +965,52 @@ async function ensureFoodOrderColumns() {
   });
   await addColumn("foodOrderPayloadJson", {
     type: DataTypes.TEXT("long"),
+    allowNull: true,
+  });
+}
+
+async function ensureOrderRatingColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Order";
+  const columns = await queryInterface.describeTable(tableName);
+
+  const addColumn = (name: string, definition: any) => {
+    if (!columns[name]) {
+      return queryInterface.addColumn(tableName, name, definition);
+    }
+    return Promise.resolve();
+  };
+
+  await addColumn("driverRating", {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  });
+  await addColumn("driverRatingComment", {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  });
+  await addColumn("driverRatedAt", {
+    type: DataTypes.DATE,
+    allowNull: true,
+  });
+  await addColumn("ratedByUserId", {
+    type: DataTypes.UUID,
+    allowNull: true,
+  });
+  await addColumn("userRating", {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  });
+  await addColumn("userRatingComment", {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  });
+  await addColumn("userRatedAt", {
+    type: DataTypes.DATE,
+    allowNull: true,
+  });
+  await addColumn("ratedByDriverId", {
+    type: DataTypes.UUID,
     allowNull: true,
   });
 }

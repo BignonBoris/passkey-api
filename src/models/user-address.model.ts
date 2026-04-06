@@ -57,7 +57,7 @@ UserAddress.init(
   }
 );
 
-User.hasMany(UserAddress, { foreignKey: "userId", as: "addresses", constraints: false });
-UserAddress.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
+User.hasMany(UserAddress, { foreignKey: "userId", as: "addresses" });
+UserAddress.belongsTo(User, { foreignKey: "userId", as: "user" });
 
 export default UserAddress;

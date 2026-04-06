@@ -45,9 +45,9 @@ SupportTicketMessage.init(
   }
 );
 
-SupportTicket.hasMany(SupportTicketMessage, { foreignKey: "ticketId", as: "messages", constraints: false });
-SupportTicketMessage.belongsTo(SupportTicket, { foreignKey: "ticketId", as: "ticket", constraints: false });
-User.hasMany(SupportTicketMessage, { foreignKey: "senderId", as: "supportMessagesSent", constraints: false });
-SupportTicketMessage.belongsTo(User, { foreignKey: "senderId", as: "sender", constraints: false });
+SupportTicket.hasMany(SupportTicketMessage, { foreignKey: "ticketId", as: "messages" });
+SupportTicketMessage.belongsTo(SupportTicket, { foreignKey: "ticketId", as: "ticket" });
+User.hasMany(SupportTicketMessage, { foreignKey: "senderId", as: "supportMessagesSent" });
+SupportTicketMessage.belongsTo(User, { foreignKey: "senderId", as: "sender" });
 
 export default SupportTicketMessage;

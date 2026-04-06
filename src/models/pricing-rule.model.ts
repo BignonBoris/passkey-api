@@ -1,6 +1,7 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
 import { DEFAULT_COUNTRY_ID } from "../constants/countries";
+import Country from "./country.model";
 
 export enum PricingRuleType {
   WAITING = "WAITING",
@@ -43,9 +44,10 @@ PricingRule.init(
       primaryKey: true,
     },
     countryId: {
-      type: DataTypes.UUID,
+      type: DataTypes.STRING(16),
       allowNull: false,
       defaultValue: DEFAULT_COUNTRY_ID,
+      references: { model: Country, key: "id" },
     },
     ruleType: {
       type: DataTypes.ENUM(
@@ -111,5 +113,9 @@ PricingRule.init(
     freezeTableName: true,
   }
 );
+
+
+Country.hasMany(PricingRule, { foreignKey: "countryId", as: "pricingRules" });
+PricingRule.belongsTo(Country, { foreignKey: "countryId", as: "country" });
 
 export default PricingRule;

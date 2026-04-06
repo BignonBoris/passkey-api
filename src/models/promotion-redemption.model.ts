@@ -48,11 +48,11 @@ PromotionRedemption.init(
   }
 );
 
-Promotion.hasMany(PromotionRedemption, { foreignKey: "promotionId", as: "redemptions", constraints: false });
-PromotionRedemption.belongsTo(Promotion, { foreignKey: "promotionId", as: "promotion", constraints: false });
-User.hasMany(PromotionRedemption, { foreignKey: "userId", as: "redemptions", constraints: false });
-PromotionRedemption.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
-Order.hasMany(PromotionRedemption, { foreignKey: "orderId", as: "redemptions", constraints: false });
-PromotionRedemption.belongsTo(Order, { foreignKey: "orderId", as: "order", constraints: false });
+Promotion.hasMany(PromotionRedemption, { foreignKey: "promotionId", as: "redemptions" });
+PromotionRedemption.belongsTo(Promotion, { foreignKey: "promotionId", as: "promotion" });
+User.hasMany(PromotionRedemption, { foreignKey: "userId", as: "redemptions" });
+PromotionRedemption.belongsTo(User, { foreignKey: "userId", as: "user" });
+Order.hasMany(PromotionRedemption, { foreignKey: "orderId", as: "redemptions" });
+PromotionRedemption.belongsTo(Order, { foreignKey: "orderId", as: "order" });
 
 export default PromotionRedemption;

@@ -61,7 +61,7 @@ KycRequest.init(
   }
 );
 
-User.hasMany(KycRequest, { foreignKey: "userId", as: "kycRequests", constraints: false });
-KycRequest.belongsTo(User, { foreignKey: "userId", as: "user", constraints: false });
+User.hasMany(KycRequest, { foreignKey: "userId", as: "kycRequests" });
+KycRequest.belongsTo(User, { foreignKey: "userId", as: "user" });
 
 export default KycRequest;

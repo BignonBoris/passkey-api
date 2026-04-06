@@ -59,7 +59,7 @@ DriverDocument.init(
   }
 );
 
-User.hasMany(DriverDocument, { foreignKey: "userId", as: "driverDocuments", constraints: false });
-DriverDocument.belongsTo(User, { foreignKey: "userId", as: "driver", constraints: false });
+User.hasMany(DriverDocument, { foreignKey: "userId", as: "driverDocuments" });
+DriverDocument.belongsTo(User, { foreignKey: "userId", as: "driver" });
 
 export default DriverDocument;
