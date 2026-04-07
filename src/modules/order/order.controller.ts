@@ -384,56 +384,68 @@ export const cancelDelivery = async (req: Request, res: Response) => {
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
-    const { userId, driverId, status } = req.query;
+    const { userId, driverId, status, includeArchived, archived } = req.query;
     const where: any = {};
     if (userId) where.userId = userId;
     if (driverId) where.driverId = driverId;
     if (status) where.status = status;
+    const includeArchivedFlag =
+      String(includeArchived || "").trim().toLowerCase() === "true" ||
+      String(archived || "").trim().toLowerCase() === "all";
+    if (!includeArchivedFlag) {
+      where.isArchived = false;
+    }
+
     const orders = await Order.findAll({ where, order: [["createdAt", "DESC"]] });
 
     const enrichedOrders = await Promise.all(
       orders.map(async (order) => {
         const rawOrder = order.toJSON() as Record<string, unknown>;
-        const currentDriverId = String(order.get("driverId") || "").trim();
+        const currentDriverId = String(rawOrder.driverId || "").trim();
 
-        const [payment, driver] = await Promise.all([
-          Payment.findOne({
-            where: { orderId: String(order.get("id") || "") },
-            order: [["createdAt", "DESC"]],
-          }),
-          currentDriverId
-            ? User.findByPk(currentDriverId, {
-                attributes: ["id", "name", "phone", "rating", "photoUrl"],
-              })
-            : Promise.resolve(null),
-        ]);
+        try {
+          const [payment, driver] = await Promise.all([
+            Payment.findOne({
+              where: { orderId: String(rawOrder.id || "") },
+              order: [["createdAt", "DESC"]],
+            }),
+            currentDriverId
+              ? User.findByPk(currentDriverId, {
+                  attributes: ["id", "name", "phone", "rating", "photoUrl"],
+                })
+              : Promise.resolve(null),
+          ]);
 
-        return {
-          ...rawOrder,
-          paymentStatus: String(payment?.get("status") || ""),
-          payment_status: String(payment?.get("status") || ""),
-          paymentMethod: String(payment?.get("method") || ""),
-          payment_method: String(payment?.get("method") || ""),
-          payment: payment
-            ? {
-                id: String(payment.get("id") || ""),
-                status: String(payment.get("status") || ""),
-                method: String(payment.get("method") || ""),
-                amount: Number(payment.get("amount") || 0),
-                currency: String(payment.get("currency") || ""),
-                paidAt: payment.get("paidAt"),
-              }
-            : null,
-          driver: driver
-            ? {
-                id: String(driver.get("id") || ""),
-                name: String(driver.get("name") || ""),
-                phone: String(driver.get("phone") || ""),
-                rating: Number(driver.get("rating") || 0),
-                photoUrl: String(driver.get("photoUrl") || ""),
-              }
-            : null,
-        };
+          return {
+            ...rawOrder,
+            paymentStatus: String(payment?.get("status") || rawOrder.paymentStatus || ""),
+            payment_status: String(payment?.get("status") || rawOrder.payment_status || ""),
+            paymentMethod: String(payment?.get("method") || rawOrder.paymentMethod || ""),
+            payment_method: String(payment?.get("method") || rawOrder.payment_method || ""),
+            payment: payment
+              ? {
+                  id: String(payment.get("id") || ""),
+                  status: String(payment.get("status") || ""),
+                  method: String(payment.get("method") || ""),
+                  amount: Number(payment.get("amount") || 0),
+                  currency: String(payment.get("currency") || ""),
+                  paidAt: payment.get("paidAt") || null,
+                }
+              : null,
+            driver: driver
+              ? {
+                  id: String(driver.get("id") || ""),
+                  name: String(driver.get("name") || ""),
+                  phone: String(driver.get("phone") || ""),
+                  rating: Number(driver.get("rating") || 0),
+                  photoUrl: String(driver.get("photoUrl") || ""),
+                }
+              : null,
+          };
+        } catch (enrichmentError) {
+          console.error("getOrders enrichment failed", enrichmentError);
+          return rawOrder;
+        }
       })
     );
 
