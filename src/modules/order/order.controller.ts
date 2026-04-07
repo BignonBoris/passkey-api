@@ -136,6 +136,34 @@ function resolveParcelNature(input: Record<string, unknown>): string {
   ).trim();
 }
 
+function resolveDeliveryPhone(input: Record<string, unknown>): string {
+  return String(
+    input.deliveryPhone ??
+    input.delivery_phone ??
+    input.receiverPhone ??
+    input.receiver_phone ??
+    input.destinationPhone ??
+    ""
+  ).trim();
+}
+
+async function sendCompletionOtpSmsIfPossible(params: {
+  phone: string;
+  otp: string;
+  parcelNature?: string;
+}) {
+  const phone = params.phone.trim();
+  const otp = params.otp.trim();
+  if (!phone || !otp) return;
+
+  const parcelLabel = params.parcelNature?.trim();
+  const message = parcelLabel
+    ? `Code OTP PassKey: ${otp}. Communiquez ce code a la livraison du colis "${parcelLabel}".`
+    : `Code OTP PassKey: ${otp}. Communiquez ce code a la livraison de votre colis.`;
+
+  await sendSmsNotification(phone, message);
+}
+
 async function getDriverSearchRadiusKm(): Promise<number> {
   try {
     const settings = await AppSettings.findOne({ where: { section: 'operations' } });
@@ -296,6 +324,7 @@ export const createOrder = async (req: Request, res: Response) => {
     const { userId, pickupLocation, destinationLocation, pickupAddress, destinationAddress, vehicleId, distance, durationMinutes, extras, tip, pickupTimestamp, simulationMode } = req.body;
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
     const parcelNature = resolveParcelNature(req.body || {});
+    const deliveryPhone = resolveDeliveryPhone(req.body || {});
     const countryId = await resolveCountryId(req.body?.countryId || "");
     const pricing = await calculateDeliveryPricing({
       vehicleType: vehicleId,
@@ -317,6 +346,11 @@ export const createOrder = async (req: Request, res: Response) => {
       packageDescription: parcelNature,
     });
     const paymentRow = await Payment.create({ orderId: newOrder.get('id'), userId, amount: pricing.price, currency: "XOF", status: "PENDING", method: paymentMethod });
+    await sendCompletionOtpSmsIfPossible({
+      phone: deliveryPhone,
+      otp: String(newOrder.get('completionOtp') || ''),
+      parcelNature,
+    });
     const io: Server = (req as any).io;
     if (!simulationMode) notifyNearbyDrivers(newOrder, io, pricing, paymentRow).catch(console.error);
     io.to('rides').emit('ride:created', newOrder);
@@ -730,10 +764,16 @@ export const createDeliveryRequest = async (req: Request, res: Response) => {
     const { userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, distance, vehicleType } = req.body;
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
     const parcelNature = resolveParcelNature(req.body || {});
+    const deliveryPhone = resolveDeliveryPhone(req.body || {});
     const countryId = await resolveCountryId("");
     const pricing = await calculateDeliveryPricing({ vehicleType, countryId, distanceKm: extractDistanceKm(distance), durationMinutes: 0, extras: 0, tip: 0 });
     const newOrder = await Order.create({ countryId, userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, price: pricing.price, distance: String(distance || ""), status: "PENDING", vehicleType, completionOtp: generateCompletionOtp(), parcelNature, packageDescription: parcelNature });
     const paymentRow = await Payment.create({ orderId: newOrder.get('id'), userId, amount: pricing.price, status: "PENDING", method: paymentMethod });
+    await sendCompletionOtpSmsIfPossible({
+      phone: deliveryPhone,
+      otp: String(newOrder.get('completionOtp') || ''),
+      parcelNature,
+    });
     const io: Server = (req as any).io;
     notifyNearbyDrivers(newOrder, io, pricing, paymentRow).catch(console.error);
     return res.status(201).json({ success: true, order: newOrder });
