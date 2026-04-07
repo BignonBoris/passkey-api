@@ -3,6 +3,7 @@ import VehiclePricingConfig from '../../models/vehicle-pricing-config.model';
 import VehicleType from '../../models/vehicle-type.model';
 import { getRouteDetails } from './maps.service';
 import { resolveCountryFromCoordinates } from '../../services/country.service';
+import { calculateDeliveryPricing } from '../../services/pricing.service';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
   moto: 0.8,
@@ -77,39 +78,16 @@ export const calculateTrip = async (req: Request, res: Response) => {
       const vehicleType = source.code;
       const config = configByType.get(vehicleType);
       if (!config || !vehicleType) return null;
-      const baseFare = Number(config.baseFare);
-      const perKmRate = Number(config.perKmRate);
-      const perMinuteRate = Number(config.perMinuteRate);
-      const bookingFee = Number(config.bookingFee);
-      const minimumFare = Number(config.minimumFare);
-
-      if (!vehicleType) return null;
-      if (
-        !Number.isFinite(baseFare) ||
-        !Number.isFinite(perKmRate) ||
-        !Number.isFinite(perMinuteRate) ||
-        !Number.isFinite(bookingFee) ||
-        !Number.isFinite(minimumFare)
-      ) {
-        return null;
-      }
 
       const speedFactor = VEHICLE_SPEED_FACTORS[vehicleType] ?? 1.0;
       const adjustedDurationSeconds = routeData.durationValue * speedFactor;
       const adjustedDurationMinutes = adjustedDurationSeconds / 60;
 
-      const rawPrice =
-        baseFare +
-        bookingFee +
-        distanceKm * perKmRate +
-        adjustedDurationMinutes * perMinuteRate;
-      let price = Math.max(rawPrice, minimumFare);
-      price = Math.ceil(price / 50) * 50;
-
       return {
         id: vehicleType,
         name: source.name || toVehicleLabel(vehicleType),
-        price,
+        distanceKm,
+        durationMinutes: Math.ceil(adjustedDurationMinutes),
         distance: routeData.distanceText,
         duration: `${Math.ceil(adjustedDurationMinutes)} min`,
         image: `${vehicleType}.png`,
@@ -125,10 +103,35 @@ export const calculateTrip = async (req: Request, res: Response) => {
     });
   }
 
+  const pricedOptions = await Promise.all(
+    options.map(async (option) => {
+      const pricing = await calculateDeliveryPricing({
+        vehicleType: option.id,
+        countryId,
+        distanceKm: option.distanceKm,
+        durationMinutes: option.durationMinutes,
+        extras: 0,
+        tip: 0,
+      });
+
+      return {
+        id: option.id,
+        name: option.name,
+        price: pricing.price,
+        distanceKm: option.distanceKm,
+        durationMinutes: option.durationMinutes,
+        distance: option.distance,
+        duration: option.duration,
+        image: option.image,
+        iconKey: option.iconKey,
+      };
+    })
+  );
+
   return res.json({
     success: true,
     origin: pickup,
     destination: delivery,
-    options,
+    options: pricedOptions,
   });
 };

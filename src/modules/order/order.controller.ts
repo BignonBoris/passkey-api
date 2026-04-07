@@ -174,11 +174,12 @@ function hasUsableFcmToken(value: unknown): boolean {
   return token !== "" && token !== "null" && token !== "undefined";
 }
 
-function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) {
+async function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) {
   const orderId = String(order.get('id') || '').trim();
   const userId = String(order.get('userId') || '').trim();
   const pickupCoords = parseLatLng(String(order.get('pickupLocation') || ''));
   const destinationCoords = parseLatLng(String(order.get('destinationLocation') || ''));
+  const customer = userId ? await User.findByPk(userId) : null;
 
   return {
     type: "NEW_DELIVERY_REQUEST",
@@ -210,8 +211,12 @@ function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) {
     parcelNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
     packageNature: String(order.get('parcelNature') || order.get('packageDescription') || ''),
     packageDescription: String(order.get('packageDescription') || order.get('parcelNature') || ''),
-    customerName: 'Client PassKey',
-    customerPhone: '',
+    customerName: String(customer?.get('name') || 'Client PassKey'),
+    customerPhone: String(customer?.get('phone') || ''),
+    customerRating: String(Number(customer?.get('rating') || 0)),
+    user_name: String(customer?.get('name') || 'Client PassKey'),
+    user_phone: String(customer?.get('phone') || ''),
+    user_rating: String(Number(customer?.get('rating') || 0)),
     status: String(order.get('status') || 'PENDING'),
     createdAt: new Date().toISOString(),
     timestamp: new Date().toISOString(),
@@ -261,7 +266,7 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
 
   console.log(`[RÉSULTAT] ${nearbyDrivers.length} livreurs vont recevoir l'appel de course.\n`);
 
-  const deliveryRequestPayload = buildDriverDeliveryRequestPayload(order, paymentRow);
+  const deliveryRequestPayload = await buildDriverDeliveryRequestPayload(order, paymentRow);
 
   const pushPromises = nearbyDrivers.map(d => {
     const driverId = String(d.get('id') || '').trim();
@@ -358,7 +363,16 @@ export const cancelDelivery = async (req: Request, res: Response) => {
     const driverId = order.get('driverId');
     if (driverId) await User.update({ isAvailable: true }, { where: { id: driverId } });
     const io: Server = (req as any).io;
-    io.to(`user_${order.get('userId')}`).emit("order_status_changed", { orderId, status: "CANCELLED" });
+    const payload = {
+      orderId,
+      status: "CANCELLED",
+      driverId: String(driverId || ""),
+      cancelledBy: "USER",
+    };
+    io.to(`user_${order.get('userId')}`).emit("order_status_changed", payload);
+    if (driverId) {
+      io.to(`user_${driverId}`).emit("order_status_changed", payload);
+    }
     return res.status(200).json({ success: true });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
