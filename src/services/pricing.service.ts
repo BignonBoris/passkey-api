@@ -49,15 +49,6 @@ export interface PricingSnapshot {
   ruleReferences: Array<{ id: string | null; type: PricingRuleType }>;
 }
 
-const DEFAULT_SURCHARGES: Record<PricingRuleType, number> = {
-  [PricingRuleType.PEAK]: 0.2,
-  [PricingRuleType.NIGHT]: 0.15,
-  [PricingRuleType.EARLY_MORNING]: 0.1,
-  [PricingRuleType.WAITING]: 0,
-  [PricingRuleType.CANCELLATION_BEFORE_ARRIVAL]: 0,
-  [PricingRuleType.CANCELLATION_AFTER_ARRIVAL]: 0,
-};
-
 const DEFAULT_WAITING_RATE = 50; // FCFA per minute
 const DEFAULT_WAITING_FREE_MINUTES = 5;
 
@@ -178,14 +169,8 @@ async function calculateTimeSurcharge(
         total += rule.adjustmentValue;
         break;
       default:
-        total += amount * DEFAULT_SURCHARGES[ruleType];
         break;
     }
-  }
-
-  if (!rules.length) {
-    total = amount * DEFAULT_SURCHARGES[ruleType];
-    ruleRefs.push({ id: null, type: ruleType });
   }
 
   return { amount: Number(total), ruleRefs };

@@ -370,6 +370,11 @@ export const cancelDelivery = async (req: Request, res: Response) => {
       cancelledBy: "USER",
     };
     io.to(`user_${order.get('userId')}`).emit("order_status_changed", payload);
+    io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+      orderId,
+      requestId: orderId,
+      cancelledBy: "USER",
+    });
     if (driverId) {
       io.to(`user_${driverId}`).emit("order_status_changed", payload);
     }
@@ -385,7 +390,54 @@ export const getOrders = async (req: Request, res: Response) => {
     if (driverId) where.driverId = driverId;
     if (status) where.status = status;
     const orders = await Order.findAll({ where, order: [["createdAt", "DESC"]] });
-    return res.status(200).json(orders);
+
+    const enrichedOrders = await Promise.all(
+      orders.map(async (order) => {
+        const rawOrder = order.toJSON() as Record<string, unknown>;
+        const currentDriverId = String(order.get("driverId") || "").trim();
+
+        const [payment, driver] = await Promise.all([
+          Payment.findOne({
+            where: { orderId: String(order.get("id") || "") },
+            order: [["createdAt", "DESC"]],
+          }),
+          currentDriverId
+            ? User.findByPk(currentDriverId, {
+                attributes: ["id", "name", "phone", "rating", "photoUrl"],
+              })
+            : Promise.resolve(null),
+        ]);
+
+        return {
+          ...rawOrder,
+          paymentStatus: String(payment?.get("status") || ""),
+          payment_status: String(payment?.get("status") || ""),
+          paymentMethod: String(payment?.get("method") || ""),
+          payment_method: String(payment?.get("method") || ""),
+          payment: payment
+            ? {
+                id: String(payment.get("id") || ""),
+                status: String(payment.get("status") || ""),
+                method: String(payment.get("method") || ""),
+                amount: Number(payment.get("amount") || 0),
+                currency: String(payment.get("currency") || ""),
+                paidAt: payment.get("paidAt"),
+              }
+            : null,
+          driver: driver
+            ? {
+                id: String(driver.get("id") || ""),
+                name: String(driver.get("name") || ""),
+                phone: String(driver.get("phone") || ""),
+                rating: Number(driver.get("rating") || 0),
+                photoUrl: String(driver.get("photoUrl") || ""),
+              }
+            : null,
+        };
+      })
+    );
+
+    return res.status(200).json(enrichedOrders);
   } catch (error) { return res.status(500).json({ error: "Failed" }); }
 };
 
