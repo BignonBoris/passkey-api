@@ -206,6 +206,45 @@ export const sendPushNotification = async (
   }
 };
 
+export const sendIncomingDriverCallNotification = async (
+  token: string,
+  data: Record<string, string> = {},
+  fallback?: PushFallbackOptions
+) => {
+  const normalizedToken = normalizeToken(token);
+  if (!normalizedToken || normalizedToken === 'undefined' || normalizedToken === 'null') {
+    console.warn('FCM ignored: empty or invalid token');
+    return fallbackToSocket(fallback);
+  }
+
+  const message = {
+    android: {
+      priority: "high" as const,
+      notification: {
+        channelId: "incoming_delivery_calls",
+        priority: "max" as const,
+        defaultSound: true,
+        sound: "default",
+      },
+    },
+    data,
+    token: normalizedToken,
+  };
+
+  try {
+    const response = await sendWithTimeout(admin.messaging().send(message), fallback?.timeoutMs ?? 8000);
+    console.log('Incoming driver call FCM sent successfully:', response);
+    return {
+      delivered: true,
+      channel: 'fcm' as const,
+      response,
+    };
+  } catch (error) {
+    console.error('Incoming driver call FCM send error:', error);
+    return fallbackToSocket(fallback);
+  }
+};
+
 export const sendSmsNotification = async (phone: string, message: string) => {
   const normalizedPhone = normalizeToken(phone);
   const normalizedMessage = (message ?? '').toString().trim();

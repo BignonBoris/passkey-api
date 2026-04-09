@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import {
+  sendIncomingDriverCallNotification,
   sendNotificationToDriver,
   sendPushNotification,
   sendSmsNotification,
@@ -308,10 +309,8 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
       return Promise.resolve();
     }
 
-    return sendPushNotification(
+    return sendIncomingDriverCallNotification(
       fcmToken,
-      "Nouvelle course disponible",
-      `Course de ${order.get('price')} FCFA vers ${order.get('destinationAddress')}`,
       deliveryRequestPayload
     );
   });
