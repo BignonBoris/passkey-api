@@ -29,6 +29,7 @@ const DELIVERY_STATUSES = [
   "PICKED_UP",
   "IN_TRANSIT",
   "COMPLETED",
+  "NO_DRIVER_FOUND",
   "CANCELLED",
 ] as const;
 
@@ -51,6 +52,9 @@ function normalizeDeliveryStatus(value: unknown): string {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "IN_PROGRESS" || normalized === "ONGOING" || normalized === "ON_GOING") {
     return "IN_TRANSIT";
+  }
+  if (normalized === "SEARCH_EXPIRED" || normalized === "NO_DRIVER" || normalized === "NO_DRIVER_AVAILABLE") {
+    return "NO_DRIVER_FOUND";
   }
   return normalized;
 }
@@ -522,6 +526,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const order = await Order.findByPk(orderId);
     if (!order) return res.status(404).json({ message: "Commande non trouvée" });
     if (status === 'ACCEPTED' && order.get('status') !== 'PENDING') return res.status(400).json({ success: false, message: "Déjà acceptée par un autre livreur" });
+    const previousStatus = String(order.get('status') || '').trim().toUpperCase();
     const updateData: any = { status };
     if (driverId) updateData.driverId = driverId;
     if (status === "ACCEPTED" && driverId) {
@@ -547,6 +552,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       requestId: orderId,
       acceptedByDriverId: String(driverId || order.get('driverId') || ''),
     });
+    if (status === 'NO_DRIVER_FOUND') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+      orderId,
+      requestId: orderId,
+      cancelledBy: 'SYSTEM_NO_DRIVER_FOUND',
+    });
+    if (status === 'PENDING' && previousStatus === 'NO_DRIVER_FOUND') {
+      const paymentRow = await Payment.findOne({
+        where: { orderId },
+        order: [["createdAt", "DESC"]],
+      });
+      notifyNearbyDrivers(order, io, null, paymentRow).catch(console.error);
+    }
     if (status === "COMPLETED") await notifyUserDeliveryStep(order, { title: "Livraison terminee", body: "Merci!", type: "ORDER_COMPLETED" });
     if (status === "ACCEPTED") {
       await notifyUserDeliveryStep(order, {

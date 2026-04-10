@@ -224,6 +224,7 @@ Order.init(
         "PICKED_UP",
         "IN_TRANSIT",
         "COMPLETED",
+        "NO_DRIVER_FOUND",
         "CANCELLED"
       ),
       defaultValue: "PENDING",
