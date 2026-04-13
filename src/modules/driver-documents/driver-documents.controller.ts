@@ -7,11 +7,13 @@ import DriverVehicle from "../../models/driver-vehicle.model";
 import VehicleType from "../../models/vehicle-type.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { resolveCountryId } from "../../services/country.service";
+import { SmsService } from "../../services/sms/sms.service";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",
   "DRIVER_LICENSE",
   "ID_PHOTO",
+  "VEHICLE_IMAGE",
   "VEHICLE_REGISTRATION",
   "VEHICLE_INSURANCE",
 ] as const;
@@ -281,13 +283,15 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
     const idCard = files?.idCard?.[0];
     const driverLicense = files?.driverLicense?.[0];
     const idPhoto = files?.idPhoto?.[0];
+    const vehicleImage = files?.vehicleImage?.[0];
     const vehicleRegistration = files?.vehicleRegistration?.[0];
     const vehicleInsurance = files?.vehicleInsurance?.[0];
 
-    if (!idCard || !driverLicense || !idPhoto || !vehicleRegistration || !vehicleInsurance) {
+    if (!idCard || !driverLicense || !idPhoto || !vehicleImage || !vehicleRegistration || !vehicleInsurance) {
       return res.status(400).json({
         success: false,
-        message: "idCard, driverLicense, idPhoto, vehicleRegistration and vehicleInsurance files are required",
+        message:
+          "idCard, driverLicense, idPhoto, vehicleImage, vehicleRegistration and vehicleInsurance files are required",
       });
     }
 
@@ -342,6 +346,7 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       { type: "ID_CARD", file: idCard },
       { type: "DRIVER_LICENSE", file: driverLicense },
       { type: "ID_PHOTO", file: idPhoto },
+      { type: "VEHICLE_IMAGE", file: vehicleImage },
       { type: "VEHICLE_REGISTRATION", file: vehicleRegistration },
       { type: "VEHICLE_INSURANCE", file: vehicleInsurance },
     ];
@@ -385,6 +390,15 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       submittedAt: new Date(),
     });
 
+    const confirmationMessage =
+      "Felicitations pour la soumission complete de votre dossier. Nous reviendrons vers vous tres bientot.";
+    const phone = String(currentUser?.get("phone") || "").trim();
+    if (phone) {
+      SmsService.sendSms(phone, confirmationMessage).catch((error) => {
+        console.error("Driver onboarding confirmation SMS failed:", error);
+      });
+    }
+
     return res.status(201).json({
       success: true,
       message: "Driver onboarding submitted",
@@ -409,6 +423,7 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
     const idCard = files?.idCard?.[0];
     const driverLicense = files?.driverLicense?.[0];
     const idPhoto = files?.idPhoto?.[0];
+    const vehicleImage = files?.vehicleImage?.[0];
     const vehicleRegistration = files?.vehicleRegistration?.[0];
     const vehicleInsurance = files?.vehicleInsurance?.[0];
 
@@ -427,6 +442,7 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
       Boolean(idCard) ||
       Boolean(driverLicense) ||
       Boolean(idPhoto) ||
+      Boolean(vehicleImage) ||
       Boolean(vehicleRegistration) ||
       Boolean(vehicleInsurance);
 
@@ -520,6 +536,7 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
     if (idCard) uploads.push({ type: "ID_CARD", file: idCard });
     if (driverLicense) uploads.push({ type: "DRIVER_LICENSE", file: driverLicense });
     if (idPhoto) uploads.push({ type: "ID_PHOTO", file: idPhoto });
+    if (vehicleImage) uploads.push({ type: "VEHICLE_IMAGE", file: vehicleImage });
     if (vehicleRegistration) uploads.push({ type: "VEHICLE_REGISTRATION", file: vehicleRegistration });
     if (vehicleInsurance) uploads.push({ type: "VEHICLE_INSURANCE", file: vehicleInsurance });
 

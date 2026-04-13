@@ -11,6 +11,10 @@ import {
   syncPaymentWithFedaPay,
 } from "../../services/fedapay.service";
 import { sendPushNotification } from "../../services/notification.service";
+import DriverRevenueConfig from "../../models/driver-revenue-config.model";
+import { calculateCourseRevenueSettlement } from "../../services/revenue.service";
+import { applyDriverAccountMovement } from "../driver-funding/driver-funding.service";
+import { resolveCountryId } from "../../services/country.service";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
@@ -68,9 +72,71 @@ function paymentResponse(payment: Payment) {
     paidAt: payment.get("paidAt"),
     failureReason: payment.get("failureReason"),
     callbackReceivedAt: payment.get("callbackReceivedAt"),
+    revenueAppliedAt: payment.get("revenueAppliedAt"),
+    appliedDriverRevenue: payment.get("appliedDriverRevenue"),
+    appliedPlatformShare: payment.get("appliedPlatformShare"),
     createdAt: payment.get("createdAt"),
     updatedAt: payment.get("updatedAt"),
   };
+}
+
+async function resolveDriverRevenueConfigForOrder(order: Order) {
+  const vehicleType = String(order.get("vehicleType") || "").trim().toLowerCase();
+  const countryId = await resolveCountryId(String(order.get("countryId") || ""));
+  if (!vehicleType) return null;
+
+  return (
+    await DriverRevenueConfig.findOne({ where: { vehicleType, countryId } })
+  ) ?? (
+    await DriverRevenueConfig.findOne({ where: { vehicleType } })
+  );
+}
+
+async function applyRevenueSettlementIfNeeded(params: {
+  payment: Payment;
+  order: Order;
+}) {
+  const { payment, order } = params;
+  const currentStatus = String(payment.get("status") || "").trim().toUpperCase();
+  if (currentStatus !== "PAID") return;
+  if (payment.get("revenueAppliedAt")) return;
+
+  const driverId = String(order.get("driverId") || payment.get("driverId") || "").trim();
+  if (!driverId) return;
+
+  const config = await resolveDriverRevenueConfigForOrder(order);
+  if (!config) return;
+
+  const courseAmount = Number(payment.get("amount") || order.get("price") || 0);
+  const settlement = calculateCourseRevenueSettlement(config, { courseAmount });
+
+  if (settlement.driverRevenue > 0) {
+    const paymentMethod = String(payment.get("method") || "CASH").trim().toUpperCase();
+    const action = paymentMethod === "MOBILE_MONEY" ? "ADD" : "SUBTRACT";
+    const movementAmount =
+      paymentMethod === "MOBILE_MONEY"
+        ? settlement.driverRevenue
+        : settlement.platformShare;
+
+    if (movementAmount > 0) {
+      await applyDriverAccountMovement(driverId, movementAmount, action);
+    }
+  } else if (settlement.platformShare > 0) {
+    const paymentMethod = String(payment.get("method") || "CASH").trim().toUpperCase();
+    if (paymentMethod === "CASH") {
+      await applyDriverAccountMovement(driverId, settlement.platformShare, "SUBTRACT");
+    }
+  }
+
+  order.set("revenuePerDelivery", settlement.driverRevenue);
+  order.set("platformCommission", settlement.platformShare);
+  order.set("serviceFee", 0);
+  await order.save();
+
+  payment.set("revenueAppliedAt", new Date());
+  payment.set("appliedDriverRevenue", settlement.driverRevenue);
+  payment.set("appliedPlatformShare", settlement.platformShare);
+  await payment.save();
 }
 
 async function findOrderPayment(orderId: string, userId?: string) {
@@ -171,6 +237,8 @@ async function notifyPaymentEvent(
   const driverToken = String(driver?.get("fcmToken") || "").trim();
 
   if (currentStatus === "PAID" && previous !== "PAID") {
+    await applyRevenueSettlementIfNeeded({ payment, order });
+
     if (paymentMethod === "MOBILE_MONEY" && driverToken) {
       await sendPushNotification(
         driverToken,

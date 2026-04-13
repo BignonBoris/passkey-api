@@ -25,6 +25,9 @@ class Payment extends Model {
   public callbackReceivedAt?: Date | null;
   public rawProviderPayload?: string | null;
   public paidAt?: Date;
+  public revenueAppliedAt?: Date | null;
+  public appliedDriverRevenue?: number | null;
+  public appliedPlatformShare?: number | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -119,6 +122,18 @@ Payment.init(
     },
     paidAt: {
       type: DataTypes.DATE,
+      allowNull: true,
+    },
+    revenueAppliedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    appliedDriverRevenue: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    appliedPlatformShare: {
+      type: DataTypes.FLOAT,
       allowNull: true,
     },
   },

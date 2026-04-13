@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
 import {
   sendIncomingDriverCallNotification,
   sendNotificationToDriver,
@@ -60,16 +60,32 @@ function normalizeDeliveryStatus(value: unknown): string {
 }
 
 async function getOrderPaymentSnapshot(orderId: string) {
-  const payment = await Payment.findOne({
-    where: { orderId },
-    order: [["createdAt", "DESC"]],
-  });
+  const payment = await resolveOrderDisplayPayment(orderId);
 
   return {
     payment,
     paymentMethod: String(payment?.get("method") || "CASH"),
     paymentStatus: String(payment?.get("status") || "PENDING"),
   };
+}
+
+async function resolveOrderDisplayPayment(orderId: string) {
+  const payments = await Payment.findAll({
+    where: { orderId },
+    order: [["createdAt", "DESC"]],
+  });
+
+  if (!payments.length) return null;
+
+  const paidPayment = payments.find(
+    (payment) => String(payment.get("status") || "").trim().toUpperCase() === "PAID"
+  );
+  if (paidPayment) return paidPayment;
+
+  const paymentWithPaidAt = payments.find((payment) => payment.get("paidAt"));
+  if (paymentWithPaidAt) return paymentWithPaidAt;
+
+  return payments[0];
 }
 
 async function notifyUserDeliveryStep(
@@ -442,13 +458,10 @@ export const getOrders = async (req: Request, res: Response) => {
 
         try {
           const [payment, driver] = await Promise.all([
-            Payment.findOne({
-              where: { orderId: String(rawOrder.id || "") },
-              order: [["createdAt", "DESC"]],
-            }),
+            resolveOrderDisplayPayment(String(rawOrder.id || "")),
             currentDriverId
               ? User.findByPk(currentDriverId, {
-                  attributes: ["id", "name", "phone", "rating", "photoUrl"],
+                  attributes: ["id", "name", "phone", "rating", "avatarUrl"],
                 })
               : Promise.resolve(null),
           ]);
@@ -475,7 +488,7 @@ export const getOrders = async (req: Request, res: Response) => {
                   name: String(driver.get("name") || ""),
                   phone: String(driver.get("phone") || ""),
                   rating: Number(driver.get("rating") || 0),
-                  photoUrl: String(driver.get("photoUrl") || ""),
+                  photoUrl: String(driver.get("avatarUrl") || ""),
                 }
               : null,
           };

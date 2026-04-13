@@ -34,6 +34,18 @@ export async function fundDriver(driverId: string, amount: number, action: 'ADD'
   return { account, transaction };
 }
 
+export async function applyDriverAccountMovement(
+  driverId: string,
+  amount: number,
+  action: "ADD" | "SUBTRACT"
+) {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Le montant doit etre superieur a 0");
+  }
+
+  return fundDriver(driverId, amount, action);
+}
+
 export async function getFundingHistory(driverId: string) {
   return await DriverFundingTransaction.findAll({
     where: { driverId },

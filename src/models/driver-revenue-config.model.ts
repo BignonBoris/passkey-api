@@ -12,6 +12,8 @@ class DriverRevenueConfig extends Model {
   public perMinuteRate!: number;
   public commissionPercent!: number;
   public serviceFeePercent!: number;
+  public driverFixedAmount!: number;
+  public driverPercent!: number;
 }
 
 DriverRevenueConfig.init(
@@ -55,6 +57,16 @@ DriverRevenueConfig.init(
       type: DataTypes.FLOAT,
       allowNull: false,
       defaultValue: 5,
+    },
+    driverFixedAmount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    driverPercent: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
     },
   },
   {

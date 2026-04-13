@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import DriverRevenueConfig from "../../models/driver-revenue-config.model";
-import { calculateDriverRevenue, RevenueCalculationInput } from "../../services/revenue.service";
+import {
+  calculateCourseRevenueSettlement,
+  calculateDriverRevenue,
+  RevenueCalculationInput,
+} from "../../services/revenue.service";
 import { resolveCountryId } from "../../services/country.service";
 
 function parseNumber(value: unknown, fallback = 0) {
@@ -52,6 +56,8 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
       perMinuteRate,
       commissionPercent,
       serviceFeePercent,
+      driverFixedAmount,
+      driverPercent,
     } = req.body || {};
 
     if (!vehicleType) {
@@ -68,6 +74,8 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
       perMinuteRate: parseNumber(perMinuteRate),
       commissionPercent: parseNumber(commissionPercent, 0),
       serviceFeePercent: parseNumber(serviceFeePercent, 0),
+      driverFixedAmount: parseNumber(driverFixedAmount, 0),
+      driverPercent: parseNumber(driverPercent, 0),
     };
 
     let config = id ? await DriverRevenueConfig.findByPk(id) : null;
@@ -102,6 +110,8 @@ export async function updateRevenueConfig(req: Request, res: Response) {
       perMinuteRate: parseNumber(req.body.perMinuteRate, config.perMinuteRate),
       commissionPercent: parseNumber(req.body.commissionPercent, config.commissionPercent),
       serviceFeePercent: parseNumber(req.body.serviceFeePercent, config.serviceFeePercent),
+      driverFixedAmount: parseNumber(req.body.driverFixedAmount, (config as any).driverFixedAmount ?? 0),
+      driverPercent: parseNumber(req.body.driverPercent, (config as any).driverPercent ?? 0),
     };
 
     config.set(payload);
@@ -135,6 +145,7 @@ export async function calculateRevenue(req: Request, res: Response) {
       configId,
       distanceKm,
       durationMinutes,
+      courseAmount,
       tip,
       extras,
     } = req.body || {};
@@ -142,9 +153,7 @@ export async function calculateRevenue(req: Request, res: Response) {
     const countryId = await resolveCountryId(String(req.body?.countryId || req.query.countryId || ""));
     const parsedDistance = parseNumber(distanceKm);
     const parsedDuration = parseNumber(durationMinutes);
-    if (parsedDistance <= 0 && parsedDuration <= 0) {
-      return res.status(400).json({ success: false, message: "distanceKm or durationMinutes is required" });
-    }
+    const parsedCourseAmount = parseNumber(courseAmount);
 
     if (!configId && !vehicleType) {
       return res.status(400).json({ success: false, message: "vehicleType or configId is required" });
@@ -160,6 +169,20 @@ export async function calculateRevenue(req: Request, res: Response) {
       return res.status(404).json({ success: false, message: "Revenue config not found" });
     }
 
+    if (parsedCourseAmount > 0) {
+      const calculated = calculateCourseRevenueSettlement(revenueConfig, {
+        courseAmount: parsedCourseAmount,
+      });
+      return res.status(200).json({
+        success: true,
+        data: { config: revenueConfig, calculation: calculated, mode: "COURSE_AMOUNT" },
+      });
+    }
+
+    if (parsedDistance <= 0 && parsedDuration <= 0) {
+      return res.status(400).json({ success: false, message: "distanceKm, durationMinutes or courseAmount is required" });
+    }
+
     const input: RevenueCalculationInput = {
       distanceKm: parsedDistance,
       durationMinutes: parsedDuration,
@@ -168,7 +191,10 @@ export async function calculateRevenue(req: Request, res: Response) {
     };
 
     const calculated = calculateDriverRevenue(revenueConfig, input);
-    return res.status(200).json({ success: true, data: { config: revenueConfig, calculation: calculated } });
+    return res.status(200).json({
+      success: true,
+      data: { config: revenueConfig, calculation: calculated, mode: "LEGACY_DISTANCE_TIME" },
+    });
   } catch (error: any) {
     return res
       .status(500)

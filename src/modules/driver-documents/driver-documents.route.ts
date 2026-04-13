@@ -119,7 +119,7 @@ router.get("/me/vehicle-types", authenticate, authorize(["livreur"]), listMyDriv
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [fullName, city, dateOfBirth, vehicleType, brand, year, plateNumber, idCard, driverLicense, idPhoto, vehicleRegistration, vehicleInsurance]
+ *             required: [fullName, city, dateOfBirth, vehicleType, brand, year, plateNumber, idCard, driverLicense, idPhoto, vehicleImage, vehicleRegistration, vehicleInsurance]
  *             properties:
  *               fullName: { type: string }
  *               email: { type: string }
@@ -132,6 +132,7 @@ router.get("/me/vehicle-types", authenticate, authorize(["livreur"]), listMyDriv
  *               idCard: { type: string, format: binary }
  *               driverLicense: { type: string, format: binary }
  *               idPhoto: { type: string, format: binary }
+ *               vehicleImage: { type: string, format: binary }
  *               vehicleRegistration: { type: string, format: binary }
  *               vehicleInsurance: { type: string, format: binary }
  *     responses:
@@ -146,6 +147,7 @@ router.post(
     { name: "idCard", maxCount: 1 },
     { name: "driverLicense", maxCount: 1 },
     { name: "idPhoto", maxCount: 1 },
+    { name: "vehicleImage", maxCount: 1 },
     { name: "vehicleRegistration", maxCount: 1 },
     { name: "vehicleInsurance", maxCount: 1 },
   ]),
@@ -177,6 +179,7 @@ router.post(
  *               idCard: { type: string, format: binary }
  *               driverLicense: { type: string, format: binary }
  *               idPhoto: { type: string, format: binary }
+ *               vehicleImage: { type: string, format: binary }
  *               vehicleRegistration: { type: string, format: binary }
  *               vehicleInsurance: { type: string, format: binary }
  *     responses:
@@ -191,6 +194,7 @@ router.patch(
     { name: "idCard", maxCount: 1 },
     { name: "driverLicense", maxCount: 1 },
     { name: "idPhoto", maxCount: 1 },
+    { name: "vehicleImage", maxCount: 1 },
     { name: "vehicleRegistration", maxCount: 1 },
     { name: "vehicleInsurance", maxCount: 1 },
   ]),

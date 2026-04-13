@@ -6,7 +6,7 @@ import { Op } from "sequelize";
 import bcrypt from "bcrypt";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { StatusHistoryRepository } from "../../repositories/status-history.repository";
-import { sendPushNotification } from "../../services/notification.service";
+import { sendPushNotification, sendSmsNotification } from "../../services/notification.service";
 import { emitUserLocationUpdated } from "../../realtime/location.events";
 import { resolveCountryFromCoordinates } from "../../services/country.service";
 import Country from "../../models/country.model";
@@ -374,6 +374,16 @@ export const updateUserAccountStatus = async (
       after: safeUser,
     });
 
+    const userPhone = String(user.getDataValue("phone") || "").trim();
+    if (accountStatus === "suspended" && userPhone) {
+      const suspensionMessage = reason
+        ? `Votre compte PassKey a ete suspendu. Motif: ${reason}. Contactez le support pour plus d'informations.`
+        : "Votre compte PassKey a ete suspendu. Contactez le support pour plus d'informations.";
+      sendSmsNotification(userPhone, suspensionMessage).catch((error) => {
+        console.error("User suspension SMS failed:", error);
+      });
+    }
+
     return res.status(200).json({
       success: true,
       message: "User status updated successfully",
@@ -484,11 +494,12 @@ export const updateIdentityVerified = async (
     }
 
     if (identityVerified === true && targetRole === "livreur") {
+      const verificationMessage =
+        "Votre verification a ete effectuee. Votre dossier est complet et vous etes eligible pour exercer l'activite.";
       const payload = {
         type: "DRIVER_VERIFICATION_APPROVED",
         title: "Verification terminee",
-        message:
-          "Votre verification a ete effectuee. Votre dossier est complet et vous etes eligible pour exercer l'activite.",
+        message: verificationMessage,
         userId,
         createdAt: new Date().toISOString(),
       };
@@ -528,6 +539,13 @@ export const updateIdentityVerified = async (
             },
           }
         );
+      }
+
+      const targetPhone = String(user.getDataValue("phone") || "").trim();
+      if (targetPhone) {
+        sendSmsNotification(targetPhone, verificationMessage).catch((error) => {
+          console.error("Driver verification SMS failed:", error);
+        });
       }
     }
 

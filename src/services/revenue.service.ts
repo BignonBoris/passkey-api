@@ -18,6 +18,18 @@ export interface RevenueCalculationResult {
   extras: number;
 }
 
+export interface CourseRevenueSettlementInput {
+  courseAmount: number;
+}
+
+export interface CourseRevenueSettlementResult {
+  courseAmount: number;
+  driverFixedAmount: number;
+  driverPercent: number;
+  driverRevenue: number;
+  platformShare: number;
+}
+
 export function calculateDriverRevenue(
   config: DriverRevenueConfig,
   params: RevenueCalculationInput
@@ -42,5 +54,56 @@ export function calculateDriverRevenue(
     baseFare: Number(baseFare.toFixed(2)),
     tip: Number(tip.toFixed(2)),
     extras: Number(extras.toFixed(2)),
+  };
+}
+
+function roundCurrency(value: number) {
+  return Number(Math.max(0, value).toFixed(2));
+}
+
+function resolveConfiguredDriverShare(config: DriverRevenueConfig) {
+  const explicitFixedAmount = Number((config as any).driverFixedAmount ?? 0);
+  const explicitDriverPercent = Number((config as any).driverPercent ?? 0);
+
+  if (explicitFixedAmount > 0 || explicitDriverPercent > 0) {
+    return {
+      driverFixedAmount: Math.max(0, explicitFixedAmount),
+      driverPercent: Math.max(0, explicitDriverPercent),
+    };
+  }
+
+  const legacyCommission = Number(config.commissionPercent ?? 0);
+  const legacyServiceFee = Number(config.serviceFeePercent ?? 0);
+  const derivedDriverPercent = Math.max(
+    0,
+    100 - legacyCommission - legacyServiceFee
+  );
+
+  return {
+    driverFixedAmount: 0,
+    driverPercent: derivedDriverPercent,
+  };
+}
+
+export function calculateCourseRevenueSettlement(
+  config: DriverRevenueConfig,
+  params: CourseRevenueSettlementInput
+): CourseRevenueSettlementResult {
+  const courseAmount = roundCurrency(Number(params.courseAmount || 0));
+  const share = resolveConfiguredDriverShare(config);
+  const fixedAmount = roundCurrency(share.driverFixedAmount);
+  const percent = Math.max(0, Number(share.driverPercent || 0));
+  const variableComponent = roundCurrency(courseAmount * (percent / 100));
+  const driverRevenue = roundCurrency(
+    Math.min(courseAmount, fixedAmount + variableComponent)
+  );
+  const platformShare = roundCurrency(courseAmount - driverRevenue);
+
+  return {
+    courseAmount,
+    driverFixedAmount: fixedAmount,
+    driverPercent: Number(percent.toFixed(2)),
+    driverRevenue,
+    platformShare,
   };
 }

@@ -75,6 +75,7 @@ async function startServer() {
     await ensureFoodOrderColumns();
     await ensurePricingRulesTable();
     await ensurePaymentSchema();
+    await ensureDriverRevenueConfigSchema();
     await ensureSupportSchema();
     await seedSupportTicketCategories();
     await ensureFoodCatalogSchema();
@@ -141,6 +142,9 @@ async function ensurePaymentSchema() {
     { name: "failureReason", definition: { type: DataTypes.TEXT, allowNull: true } },
     { name: "callbackReceivedAt", definition: { type: DataTypes.DATE, allowNull: true } },
     { name: "rawProviderPayload", definition: { type: DataTypes.TEXT("long"), allowNull: true } },
+    { name: "revenueAppliedAt", definition: { type: DataTypes.DATE, allowNull: true } },
+    { name: "appliedDriverRevenue", definition: { type: DataTypes.FLOAT, allowNull: true } },
+    { name: "appliedPlatformShare", definition: { type: DataTypes.FLOAT, allowNull: true } },
   ];
 
   for (const column of optionalColumns) {
@@ -151,6 +155,34 @@ async function ensurePaymentSchema() {
 }
 
 startServer();
+
+async function ensureDriverRevenueConfigSchema() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "DriverRevenueConfig";
+  const tablesRaw = await queryInterface.showAllTables();
+  const tables = tablesRaw.map((table: any) =>
+    typeof table === "string" ? table : String(Object.values(table)[0] || "")
+  );
+  if (!tables.includes(tableName)) return;
+
+  const columns = await queryInterface.describeTable(tableName);
+  const optionalColumns: Array<{ name: string; definition: any }> = [
+    {
+      name: "driverFixedAmount",
+      definition: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    },
+    {
+      name: "driverPercent",
+      definition: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    },
+  ];
+
+  for (const column of optionalColumns) {
+    if (!columns[column.name]) {
+      await queryInterface.addColumn(tableName, column.name, column.definition);
+    }
+  }
+}
 
 async function ensureUserSchema() {
   const queryInterface = sequelize.getQueryInterface();
@@ -1291,6 +1323,8 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
       perMinuteRate: 0,
       commissionPercent: 25,
       serviceFeePercent: 5,
+      driverFixedAmount: 0,
+      driverPercent: 70,
     });
   }
 }
@@ -1457,14 +1491,14 @@ async function ensureDefaultAppSettings() {
 }
 
 
-// async function resetDatabase() {
-//   try {
-//     // ATTENTION : force: true supprime toutes les données !
-//     await sequelize.sync({ force: true });
-//     console.log("✅ Base de données réinitialisée et tables recréées !");
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la réinitialisation :", error);
-//   }
-// }
+async function resetDatabase() {
+  try {
+    // ATTENTION : force: true supprime toutes les données !
+    await sequelize.sync({ force: true });
+    console.log("✅ Base de données réinitialisée et tables recréées !");
+  } catch (error) {
+    console.error("❌ Erreur lors de la réinitialisation :", error);
+  }
+}
 
-// resetDatabase();
+resetDatabase();
