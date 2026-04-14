@@ -206,6 +206,25 @@ async function emitPaymentCheckoutRequested(
   };
 
   io?.to(`user_${order.get("userId")}`).emit("payment_checkout_requested", payload);
+
+  const user = await User.findByPk(String(order.get("userId") || ""));
+  const userToken = String(user?.get("fcmToken") || "").trim();
+  if (userToken) {
+    await sendPushNotification(
+      userToken,
+      "Paiement en attente",
+      "Le livreur a declenche le paiement de votre course.",
+      {
+        type: "PAYMENT_CHECKOUT_REQUESTED",
+        orderId: String(order.get("id") || ""),
+        paymentId: String(payment.get("id") || ""),
+        paymentStatus: String(payment.get("status") || "PENDING"),
+        paymentMethod: String(payment.get("method") || "MOBILE_MONEY"),
+        checkoutUrl: String(payment.get("checkoutUrl") || ""),
+        route: "/maps",
+      }
+    );
+  }
 }
 
 async function notifyPaymentEvent(
