@@ -85,6 +85,7 @@ export const updateMyProfile = async (
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
+    const currentRole = String(user.get("role") || "").trim();
 
     const { name, email, phone, password } = (req.body || {}) as Record<
       string,
@@ -101,6 +102,7 @@ export const updateMyProfile = async (
           where: {
             email: normalizedEmail,
             id: { [Op.ne]: userId },
+            role: currentRole,
           },
         });
         if (existingEmail) {
@@ -119,6 +121,7 @@ export const updateMyProfile = async (
           where: {
             phone: normalizedPhone,
             id: { [Op.ne]: userId },
+            role: currentRole,
           },
         });
         if (existingPhone) {
@@ -195,6 +198,11 @@ export const updateProfile = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Identifiant utilisateur requis" });
     }
     const dataToUpdate = req.body;
+    const existingUser = await User.findByPk(userId);
+    if (!existingUser) {
+      return res.status(404).json({ message: "Utilisateur non trouvÃ©" });
+    }
+    const currentRole = String(existingUser.get("role") || "").trim();
 
     if (dataToUpdate.email) {
       const normalizedEmail = String(dataToUpdate.email).trim().toLowerCase();
@@ -203,6 +211,7 @@ export const updateProfile = async (req: Request, res: Response) => {
           where: {
             email: normalizedEmail,
             id: { [Op.ne]: userId },
+            role: currentRole,
           },
         });
         if (existingEmail) {
