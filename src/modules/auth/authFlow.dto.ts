@@ -19,6 +19,7 @@ export const signUpSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   phone: z.string().min(8),
+  role: z.string().default("usager"),
 });
 
 export const recoverPasswordSchema = z.object({

@@ -15,7 +15,6 @@ type AdminSignUpInput = {
 };
 
 async function saveOtp(phone: string, role: string = "usager") {
-  console.log({ phone, role });
   const otp = generateOTP();
   const user = await UserRepository.findByPhoneAndRole(phone, role);
   if (!user) {
@@ -42,14 +41,14 @@ export class AuthFlowService {
     const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
     if (normalizedPhone === "INVALID_PHONE") {
       return {
-        error: "Votre numÃ©ro est invalide.",
+        error: "Votre numéro est invalide.",
         nextStep: "INVALID_PHONE"
       };
     }
 
-    // 2. Recherche en base de donnÃ©es avec le numÃ©ro PROPRE (normalisÃ©)
+    // 2. Recherche en base de données avec le numéro PROPRE (normalisé)
 
-    // Modification CRUCIALE : On cherche si le numÃ©ro existe DÃ‰JÃ€ avec ce RÃ”LE prÃ©cis
+    // Modification CRUCIALE : On cherche si le numéro existe DÉJÀ avec ce RÔLE précis
     const existingUserWithRole = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     // const user = await UserRepository.findByPhone(normalizedPhone);
@@ -62,7 +61,7 @@ export class AuthFlowService {
     let nextStep = "REGISTER";
     let error = "";
     if (isSuspended) {
-      error = "Votre compte a Ã©tÃ© suspendu";
+      error = "Votre compte a été suspendu";
       nextStep = "SUSPENDED ";
     }
     else if (exists && matchesProfile) {
@@ -175,9 +174,10 @@ export class AuthFlowService {
     };
   }
 
-  static async forgotPassword(phone: string) {
-    const normalizedPhone = await nomalizeCustomerPhone(phone);
-    const user = await UserRepository.findByPhone(normalizedPhone);
+  static async forgotPassword(phone: string, role: string, countryCode: string = 'BJ') {
+    const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
+    const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
+
     if (!user) {
       return { success: false, status: 404, message: "Utilisateur introuvable" };
     }
@@ -186,7 +186,7 @@ export class AuthFlowService {
       return { success: false, status: 403, message: "Votre compte est bloque. Contactez le support." };
     }
 
-    const otp = await saveOtp(phone, user.role);
+    const otp = await saveOtp(normalizedPhone, user.role);
     return {
       success: true,
       status: 200,

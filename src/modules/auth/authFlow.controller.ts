@@ -87,8 +87,7 @@ export const resendOtp = catchAsync(async (req: Request, res: Response) => {
 
 export const forgotPassword = catchAsync(async (req: Request, res: Response) => {
   const body = forgotPasswordSchema.parse(req.body);
-  const result = await AuthFlowService.forgotPassword(body.phone);
-
+  const result = await AuthFlowService.forgotPassword(body.phone, body.role);
   if (!result.success) {
     return res.status(result.status).json({
       success: false,
