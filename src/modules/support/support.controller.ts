@@ -12,7 +12,7 @@ const ARCHIVED_CATEGORY_PREFIX = "ARCHIVED|";
 
 function ensureAuth(req: AuthenticatedRequest, res: Response) {
   if (!req.user?.id || !req.user.role) {
-    res.status(401).json({ success: false, message: "Unauthenticated" });
+    res.status(401).json({ success: false, message: "Non authentifie" });
     return null;
   }
   return req.user;
@@ -208,7 +208,7 @@ export async function getSupportTicket(req: AuthenticatedRequest, res: Response)
     });
     if (!row) return res.status(404).json({ success: false, message: "Support ticket not found" });
     if (!isPrivileged(auth.role) && row.get("userId") !== auth.id) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
     if (!isPrivileged(auth.role) && isArchivedCategory(row.get("category"))) {
       return res.status(404).json({ success: false, message: "Support ticket not found" });
@@ -273,7 +273,7 @@ export async function updateSupportTicket(req: AuthenticatedRequest, res: Respon
     const auth = ensureAuth(req, res);
     if (!auth) return;
     if (!isPrivileged(auth.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+      return res.status(403).json({ success: false, message: "Acces refuse: insufficient role" });
     }
     const { status, priority, category, assignedTo } = req.body || {};
     const row = await SupportTicket.findByPk(req.params.id);
@@ -321,7 +321,7 @@ export async function createSupportTicketCategory(req: AuthenticatedRequest, res
     const auth = ensureAuth(req, res);
     if (!auth) return;
     if (!isPrivileged(auth.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+      return res.status(403).json({ success: false, message: "Acces refuse: insufficient role" });
     }
 
     const name = String(req.body?.name || "").trim();
@@ -353,7 +353,7 @@ export async function updateSupportTicketCategory(req: AuthenticatedRequest, res
     const auth = ensureAuth(req, res);
     if (!auth) return;
     if (!isPrivileged(auth.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+      return res.status(403).json({ success: false, message: "Acces refuse: insufficient role" });
     }
 
     const row = await SupportTicketCategory.findByPk(req.params.id);
@@ -395,7 +395,7 @@ export async function deleteSupportTicketCategory(req: AuthenticatedRequest, res
     const auth = ensureAuth(req, res);
     if (!auth) return;
     if (!isPrivileged(auth.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden: insufficient role" });
+      return res.status(403).json({ success: false, message: "Acces refuse: insufficient role" });
     }
 
     const row = await SupportTicketCategory.findByPk(req.params.id);
@@ -420,7 +420,7 @@ export async function deleteSupportTicket(req: AuthenticatedRequest, res: Respon
 
     const isAdmin = isPrivileged(auth.role);
     if (!isAdmin && row.get("userId") !== auth.id) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
     if (isArchivedCategory(row.get("category"))) {
       return res.status(200).json({ success: true, message: "Support ticket archived" });
@@ -462,7 +462,7 @@ export async function postSupportTicketMessage(req: AuthenticatedRequest, res: R
 
     const isAdmin = isPrivileged(auth.role);
     if (!isAdmin && ticket.get("userId") !== auth.id) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
     if (isArchivedCategory(ticket.get("category")) && !isAdmin) {
       return res.status(400).json({ success: false, message: "Ticket archived" });

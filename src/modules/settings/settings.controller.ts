@@ -133,7 +133,7 @@ export async function getSettings(req: Request, res: Response) {
     const data = await buildSettingsResponse();
     return res.status(200).json({ success: true, data });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to fetch settings" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de recuperer les parametres" });
   }
 }
 
@@ -147,7 +147,7 @@ export async function updateSettings(req: Request, res: Response) {
     if (!hasContact && !hasAbout && !hasOperations) {
       return res.status(400).json({
         success: false,
-        message: "At least one section is required: contact, about or operations",
+        message: "Au moins une section est requise : contact, about ou operations",
       });
     }
 
@@ -181,6 +181,6 @@ export async function updateSettings(req: Request, res: Response) {
     const data = await buildSettingsResponse();
     return res.status(200).json({ success: true, data });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update settings" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre a jour les parametres" });
   }
 }

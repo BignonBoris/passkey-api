@@ -18,7 +18,7 @@ function getIo(req: AuthenticatedRequest): Server | null {
 function ensureUser(req: AuthenticatedRequest, res: Response): string | null {
   const userId = req.user?.id;
   if (!userId) {
-    res.status(401).json({ success: false, message: "Unauthenticated" });
+    res.status(401).json({ success: false, message: "Non authentifie" });
     return null;
   }
   return userId;

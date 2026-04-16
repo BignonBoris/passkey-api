@@ -58,14 +58,14 @@ export function authorize(allowedRoles: UserRole[]) {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: "Unauthenticated",
+        message: "Non authentifie",
       });
     }
 
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden: insufficient role",
+        message: "Acces refuse: insufficient role",
       });
     }
 
@@ -78,7 +78,7 @@ export function authorizeSelfOrRoles(allowedRoles: UserRole[]) {
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: "Unauthenticated",
+        message: "Non authentifie",
       });
     }
 
@@ -90,7 +90,7 @@ export function authorizeSelfOrRoles(allowedRoles: UserRole[]) {
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Forbidden",
+        message: "Acces refuse",
       });
     }
 

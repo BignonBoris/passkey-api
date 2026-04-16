@@ -15,7 +15,7 @@ export class VerifyOtpService {
       return {
         success: false,
         status: 404,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       };
     }
 
@@ -37,7 +37,7 @@ export class VerifyOtpService {
       return {
         success: false,
         status: 400,
-        message: "Le code OTP a expiré.",
+        message: "Le code OTP a expirÃ©.",
       };
     }
 
@@ -56,7 +56,7 @@ export class VerifyOtpService {
     // so fetch the fresh user record to access id and role after update. 
 
     if (!user) {
-      throw new Error("User not found after update");
+      throw new Error("Utilisateur introuvable après la mise à jour.");
     }
 
     const canAccessCourier = user.identityVerified;

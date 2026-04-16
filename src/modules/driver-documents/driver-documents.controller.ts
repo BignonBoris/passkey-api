@@ -54,17 +54,17 @@ export async function listDriverDocuments(req: Request, res: Response) {
     });
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list driver documents" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les documents du livreur." });
   }
 }
 
 export async function getDriverDocument(req: Request, res: Response) {
   try {
     const row = await DriverDocument.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Driver document not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Document livreur introuvable." });
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to load driver document" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de charger le document du livreur." });
   }
 }
 
@@ -72,7 +72,7 @@ export async function createDriverDocument(req: Request, res: Response) {
   try {
     const { userId, type, url, expiresAt } = req.body || {};
     if (!userId || !type) {
-      return res.status(400).json({ success: false, message: "userId and type are required" });
+        return res.status(400).json({ success: false, message: "userId et type sont obligatoires." });
     }
 
     // Handle uploaded file if present
@@ -82,7 +82,7 @@ export async function createDriverDocument(req: Request, res: Response) {
     }
 
     if (!finalUrl) {
-      return res.status(400).json({ success: false, message: "Document file or URL is required" });
+        return res.status(400).json({ success: false, message: "Le fichier du document ou son URL est obligatoire." });
     }
 
     const row = await DriverDocument.create({
@@ -94,7 +94,7 @@ export async function createDriverDocument(req: Request, res: Response) {
     });
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to create driver document" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de créer le document du livreur." });
   }
 }
 
@@ -102,7 +102,7 @@ export async function updateDriverDocument(req: Request, res: Response) {
   try {
     const { status, url, expiresAt, verifiedBy } = req.body || {};
     const row = await DriverDocument.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Driver document not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Document livreur introuvable." });
 
     if (status) row.set("status", status);
     if (url !== undefined) row.set("url", url);
@@ -113,25 +113,25 @@ export async function updateDriverDocument(req: Request, res: Response) {
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update driver document" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre à jour le document du livreur." });
   }
 }
 
 export async function deleteDriverDocument(req: Request, res: Response) {
   try {
     const row = await DriverDocument.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Driver document not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Document livreur introuvable." });
     await row.destroy();
-    return res.status(200).json({ success: true, message: "Driver document deleted" });
+    return res.status(200).json({ success: true, message: "Document livreur supprimé." });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to delete driver document" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de supprimer le document du livreur." });
   }
 }
 
 export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res: Response) {
   try {
     if (!req.user?.id || req.user.role !== "livreur") {
-      return res.status(403).json({ success: false, message: "Only drivers can access this endpoint" });
+        return res.status(403).json({ success: false, message: "Seuls les livreurs peuvent accéder à ce point d'entrée." });
     }
 
     const user = await User.findByPk(req.user.id, {
@@ -150,7 +150,7 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
       ],
     });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
     const docs = await DriverDocument.findAll({
@@ -245,7 +245,7 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
 export async function listMyDriverVehicleTypes(req: AuthenticatedRequest, res: Response) {
   try {
     if (!req.user?.id || req.user.role !== "livreur") {
-      return res.status(403).json({ success: false, message: "Only drivers can access this endpoint" });
+      return res.status(403).json({ success: false, message: "Seuls les livreurs peuvent accéder à ce point d'entrée." });
     }
     const currentUser = await User.findByPk(req.user.id);
     const countryId = await resolveCountryId(String(currentUser?.get("countryId") || ""));
@@ -269,7 +269,7 @@ export async function listMyDriverVehicleTypes(req: AuthenticatedRequest, res: R
       })),
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list vehicle types" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les types de vehicule" });
   }
 }
 
@@ -409,7 +409,7 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       },
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to submit onboarding" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible d'envoyer le dossier." });
   }
 }
 
@@ -465,7 +465,7 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
 
     const user = await User.findByPk(req.user.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
     const userUpdate: Record<string, any> = {};
@@ -579,6 +579,6 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
       },
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update onboarding" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre à jour le dossier." });
   }
 }

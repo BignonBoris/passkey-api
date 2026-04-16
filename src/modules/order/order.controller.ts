@@ -1,4 +1,4 @@
-﻿import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import {
   sendIncomingDriverCallNotification,
   sendNotificationToDriver,
@@ -133,12 +133,14 @@ function extractDistanceKm(distanceValue: unknown): number {
   return 0;
 }
 
-function normalizePaymentMethod(value: unknown): "CASH" | "MOBILE_MONEY" {
+function normalizePaymentMethod(value: unknown): "CASH" | "MOBILE_MONEY" | "CARD" {
   const normalized = String(value || "")
     .trim()
     .toUpperCase()
     .replace(/[\s-]+/g, "_");
-  return normalized === "MOBILE_MONEY" ? "MOBILE_MONEY" : "CASH";
+  if (normalized === "MOBILE_MONEY") return "MOBILE_MONEY";
+  if (normalized === "CARD" || normalized === "STRIPE") return "CARD";
+  return "CASH";
 }
 
 function normalizeRatingValue(value: unknown): number | null {
@@ -383,7 +385,7 @@ export const driverArrivedPickup = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const order = await Order.findByPk(orderId);
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order) return res.status(404).json({ success: false, message: "Course introuvable" });
     await order.update({ driverArrivedPickupAt: new Date(), status: "DRIVER_ARRIVED_PICKUP" });
     await notifyUserDeliveryStep(order, { title: "Livreur arrive", body: "Votre livreur est arrive.", type: "DRIVER_ARRIVED_PICKUP" });
     const io: Server = (req as any).io;
@@ -599,7 +601,7 @@ export const submitOrderRating = async (req: AuthenticatedRequest, res: Response
     const comment = String(req.body?.comment ?? req.body?.review ?? "").trim();
 
     if (!requesterId || !requesterRole) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     if (rating == null) {

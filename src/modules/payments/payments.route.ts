@@ -6,6 +6,7 @@ import {
   createTestPaymentCheckout,
   getPaymentStatus,
   handleFedaPayCallback,
+  handleStripeCallback,
   syncPaymentStatus,
 } from "./payments.controller";
 
@@ -17,6 +18,7 @@ router.post("/orders/:orderId/checkout", authenticate, createOrderPaymentCheckou
 router.post("/orders/:orderId/select-cash", authenticate, selectOrderCashPayment);
 router.post("/orders/:orderId/mark-cash-paid", authenticate, markOrderCashPaymentPaid);
 router.get("/fedapay/callback", handleFedaPayCallback);
+router.get("/stripe/callback", handleStripeCallback);
 router.get("/:paymentId", authenticate, getPaymentStatus);
 router.post("/:paymentId/sync", authenticate, syncPaymentStatus);
 

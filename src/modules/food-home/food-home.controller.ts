@@ -157,11 +157,11 @@ async function ensureRestaurantManagerAccount(options: {
 
   const existingEmail = await User.findOne({ where: { email: managerEmail } });
   if (existingEmail) {
-    throw new Error("Manager email already exists");
+    throw new Error("L'email du gestionnaire est déjà utilisé.");
   }
   const existingPhone = await User.findOne({ where: { phone: managerPhone } });
   if (existingPhone) {
-    throw new Error("Manager phone already exists");
+    throw new Error("Le numéro du gestionnaire est déjà utilisé.");
   }
 
   const manager = await User.create({
@@ -606,13 +606,13 @@ export async function listManagedRestaurants(req: AuthenticatedRequest, res: Res
     const role = req.user?.role;
     const userId = req.user?.id;
     if (!role || !userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const where: WhereOptions = {};
     if (!isPrivilegedFoodRole(role)) {
       if (role !== "restaurant") {
-        return res.status(403).json({ success: false, message: "Forbidden" });
+        return res.status(403).json({ success: false, message: "Acces refuse" });
       }
       Object.assign(where, { ownerUserId: userId });
     }
@@ -647,7 +647,7 @@ export async function uploadFoodMedia(req: AuthenticatedRequest, res: Response) 
   try {
     const role = req.user?.role;
     if (!role || (role !== "restaurant" && !isPrivilegedFoodRole(role))) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const file = (req as any).file as { filename?: string } | undefined;
@@ -670,7 +670,7 @@ export async function uploadFoodMedia(req: AuthenticatedRequest, res: Response) 
 export async function createManagedRestaurant(req: AuthenticatedRequest, res: Response) {
   try {
     if (!isPrivilegedFoodRole(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const name = String(req.body?.name || "").trim();
@@ -792,7 +792,7 @@ export async function updateManagedRestaurant(req: AuthenticatedRequest, res: Re
 export async function assignRestaurantManager(req: AuthenticatedRequest, res: Response) {
   try {
     if (!isPrivilegedFoodRole(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const restaurant = await FoodHomeRestaurant.findByPk(String(req.params.id || "").trim());
@@ -837,7 +837,7 @@ export async function assignRestaurantManager(req: AuthenticatedRequest, res: Re
 export async function ensureRestaurantManagers(req: AuthenticatedRequest, res: Response) {
   try {
     if (!isPrivilegedFoodRole(req.user?.role)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const restaurants = await FoodHomeRestaurant.findAll({
@@ -921,7 +921,7 @@ export async function createManagedCategory(req: AuthenticatedRequest, res: Resp
     }
     const name = String(req.body?.name || "").trim();
     if (!name) {
-      return res.status(400).json({ success: false, message: "Category name is required" });
+      return res.status(400).json({ success: false, message: "Category Le nom est requis" });
     }
     const category = await FoodHomeCategory.create({
       id: buildFoodId("cat"),
@@ -1024,7 +1024,7 @@ export async function createManagedProduct(req: AuthenticatedRequest, res: Respo
     }
     const name = String(req.body?.name || "").trim();
     if (!name) {
-      return res.status(400).json({ success: false, message: "Product name is required" });
+      return res.status(400).json({ success: false, message: "Product Le nom est requis" });
     }
     const product = await FoodHomeProduct.create({
       id: buildFoodId("prod"),
@@ -1116,10 +1116,10 @@ export async function getRestaurantWorkspace(req: AuthenticatedRequest, res: Res
     const userId = req.user?.id;
     const role = req.user?.role;
     if (!userId || !role) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
     if (role !== "restaurant" && !isPrivilegedFoodRole(role)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const restaurantId = String(req.query.restaurantId || "").trim();
@@ -1207,7 +1207,7 @@ export async function createFoodOrder(req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const restaurantId = String(req.body?.restaurantId || "").trim();
@@ -1366,7 +1366,7 @@ export async function listMyFoodOrders(req: AuthenticatedRequest, res: Response)
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const orders = await Order.findAll({
@@ -1436,7 +1436,7 @@ export async function getMyFoodOrderDetail(req: AuthenticatedRequest, res: Respo
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const order = await Order.findOne({
@@ -1448,7 +1448,7 @@ export async function getMyFoodOrderDetail(req: AuthenticatedRequest, res: Respo
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Course introuvable" });
     }
 
     const payload = parseJsonObject(order.get("foodOrderPayloadJson"));
@@ -1480,7 +1480,7 @@ export async function getMyFoodOrderTracking(req: AuthenticatedRequest, res: Res
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const order = await Order.findOne({
@@ -1491,7 +1491,7 @@ export async function getMyFoodOrderTracking(req: AuthenticatedRequest, res: Res
       },
     });
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Course introuvable" });
     }
 
     const payload = parseJsonObject(order.get("foodOrderPayloadJson"));

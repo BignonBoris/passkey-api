@@ -35,7 +35,7 @@ function resolveServiceAccountFromEnv(): ServiceAccountConfig | null {
 
   if (!projectId || !clientEmail || !privateKey) {
     throw new Error(
-      'Firebase Admin credentials are incomplete. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
+      'Les identifiants Firebase Admin sont incomplets. Renseignez FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL et FIREBASE_PRIVATE_KEY.'
     );
   }
 
@@ -68,12 +68,12 @@ function resolveFirebaseCredential(): admin.credential.Credential {
 
   if (!serviceAccount) {
     throw new Error(
-      'Firebase Admin credentials are missing. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY, or point GOOGLE_APPLICATION_CREDENTIALS to a valid service-account JSON file.'
+      'Les identifiants Firebase Admin sont manquants. Renseignez FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL et FIREBASE_PRIVATE_KEY, ou faites pointer GOOGLE_APPLICATION_CREDENTIALS vers un fichier JSON de service valide.'
     );
   }
 
   if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-    throw new Error('Firebase Admin credentials are invalid. Check project ID, client email, and private key.');
+    throw new Error('Les identifiants Firebase Admin sont invalides. Vérifiez l\'ID du projet, l\'email client et la clé privée.');
   }
 
   return admin.credential.cert(serviceAccount);
@@ -92,7 +92,7 @@ function normalizeToken(token: string | null | undefined): string {
 async function sendWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`FCM timeout after ${timeoutMs}ms`));
+      reject(new Error(`Délai d'attente FCM dépassé après ${timeoutMs} ms`));
     }, timeoutMs);
 
     promise

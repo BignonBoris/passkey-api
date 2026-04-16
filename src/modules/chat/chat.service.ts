@@ -35,7 +35,7 @@ export async function loadUserOrThrow(userId: string) {
     attributes: ["id", "name", "phone", "role", "avatarUrl", "isAvailable"],
   });
   if (!user) {
-    throw new Error("User not found");
+    throw new Error("Utilisateur introuvable");
   }
   return user;
 }
@@ -61,13 +61,13 @@ export async function getOrCreateConversationForParticipants(params: {
   );
 
   if (!pair) {
-    throw new Error("Chat is only allowed between usager and livreur");
+    throw new Error("Le chat est autorisé uniquement entre un usager et un livreur.");
   }
 
   if (orderId) {
     const order = await Order.findByPk(orderId);
     if (!order) {
-      throw new Error("Order not found");
+      throw new Error("Course introuvable");
     }
   }
 
@@ -114,14 +114,14 @@ export async function createChatMessage(params: {
 
   const trimmedContent = content.trim();
   if (!trimmedContent) {
-    throw new Error("Message content is required");
+    throw new Error("Le contenu du message est obligatoire.");
   }
 
   let conversation: ChatConversation | null = null;
   if (conversationId) {
     conversation = await canUserAccessConversation(conversationId, senderId);
     if (!conversation) {
-      throw new Error("Conversation not found or access denied");
+      throw new Error("Conversation introuvable ou accès refusé.");
     }
   } else {
     conversation = await getOrCreateConversationForParticipants({
@@ -211,7 +211,7 @@ export async function listMessagesForConversation(params: {
   const { conversationId, userId, limit = 50, offset = 0 } = params;
   const conversation = await canUserAccessConversation(conversationId, userId);
   if (!conversation) {
-    throw new Error("Conversation not found or access denied");
+    throw new Error("Conversation introuvable ou accès refusé.");
   }
 
   const rows = await ChatMessage.findAll({
@@ -244,7 +244,7 @@ export async function listMessagesForConversation(params: {
 export async function markConversationAsRead(conversationId: string, userId: string) {
   const conversation = await canUserAccessConversation(conversationId, userId);
   if (!conversation) {
-    throw new Error("Conversation not found or access denied");
+    throw new Error("Conversation introuvable ou accès refusé.");
   }
 
   await ChatMessage.update(

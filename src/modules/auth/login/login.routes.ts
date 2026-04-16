@@ -26,7 +26,7 @@ const router = Router();
  *                       example: "superSecret123"
  *     responses:
  *        200:
- *           description: OTP sent successfully
+ *           description: Code OTP envoyé avec succès
  *           content:
  *              application/json:
  *                  schema:

@@ -48,14 +48,14 @@ export const getMyProfile = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const user = await User.findByPk(userId, {
       attributes: { exclude: ["password"] },
     });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
     return res.status(200).json({
@@ -66,7 +66,7 @@ export const getMyProfile = async (req: AuthenticatedRequest, res: Response) => 
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -78,12 +78,12 @@ export const updateMyProfile = async (
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const user = await User.findByPk(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
     const currentRole = String(user.get("role") || "").trim();
 
@@ -108,7 +108,7 @@ export const updateMyProfile = async (
         if (existingEmail) {
           return res
             .status(409)
-            .json({ success: false, message: "Cet email est déjà utilisé." });
+            .json({ success: false, message: "Cet email est dÃ©jÃ  utilisÃ©." });
         }
       }
       user.set("email", normalizedEmail || null);
@@ -127,7 +127,7 @@ export const updateMyProfile = async (
         if (existingPhone) {
           return res
             .status(409)
-            .json({ success: false, message: "Ce numéro est déjà utilisé." });
+            .json({ success: false, message: "Ce numÃ©ro est dÃ©jÃ  utilisÃ©." });
         }
       }
       user.set("phone", normalizedPhone);
@@ -138,7 +138,7 @@ export const updateMyProfile = async (
       if (nextPassword.length < 6) {
         return res.status(400).json({
           success: false,
-          message: "Le mot de passe doit contenir au moins 6 caractères.",
+          message: "Le mot de passe doit contenir au moins 6 caractÃ¨res.",
         });
       }
       const hashedPassword = await bcrypt.hash(nextPassword, 10);
@@ -160,7 +160,7 @@ export const updateMyProfile = async (
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -170,7 +170,7 @@ export const updateToken = async (
   res: Response
 ) => {
   try {
-    const userId = req.user?.id; // Récupéré via ton middleware JWT
+    const userId = req.user?.id; // RÃ©cupÃ©rÃ© via ton middleware JWT
     const { fcmToken } = req.body;
 
     if (!fcmToken) {
@@ -178,12 +178,12 @@ export const updateToken = async (
     }
 
     if (!userId) {
-      return res.status(401).json({ message: "Utilisateur non authentifié" });
+      return res.status(401).json({ message: "Utilisateur non authentifiÃ©" });
     }
 
     await UserRepository.updateFcmToken(userId, fcmToken);
 
-    res.status(200).json({ message: "FCM Token mis à jour avec succès" });
+    res.status(200).json({ message: "FCM Token mis Ã  jour avec succÃ¨s" });
   } catch (error) {
     res.status(500).json({ message: "Erreur serveur", error });
   }
@@ -200,7 +200,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     const dataToUpdate = req.body;
     const existingUser = await User.findByPk(userId);
     if (!existingUser) {
-      return res.status(404).json({ message: "Utilisateur non trouvÃ©" });
+      return res.status(404).json({ message: "Utilisateur non trouvÃƒÂ©" });
     }
     const currentRole = String(existingUser.get("role") || "").trim();
 
@@ -217,7 +217,7 @@ export const updateProfile = async (req: Request, res: Response) => {
         if (existingEmail) {
           return res.status(409).json({
             success: false,
-            message: "Cet email est déjà utilisé.",
+            message: "Cet email est dÃ©jÃ  utilisÃ©.",
           });
         }
         dataToUpdate.email = normalizedEmail;
@@ -237,18 +237,18 @@ export const updateProfile = async (req: Request, res: Response) => {
     }
 
     if (!updatedUser) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
+      return res.status(404).json({ message: "Utilisateur non trouvÃ©" });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Mise à jour réussie",
+      message: "Mise Ã  jour rÃ©ussie",
       user: updatedUser,
     });
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -273,7 +273,7 @@ export const getUsers = async (req: Request, res: Response) => {
 
     if (role) whereClause.role = role;
 
-    // Pour les booleens, on vérifie la chaîne de caractères car req.query reçoit du texte
+    // Pour les booleens, on vÃ©rifie la chaÃ®ne de caractÃ¨res car req.query reÃ§oit du texte
     if (isActive) whereClause.isActive = isActive === "true";
     if (isAvailable) whereClause.isAvailable = isAvailable === "true";
     if (accountStatus) whereClause.accountStatus = accountStatus;
@@ -281,7 +281,7 @@ export const getUsers = async (req: Request, res: Response) => {
       whereClause.identityVerified = identityVerified === "true";
     if (countryId) whereClause.countryId = countryId;
 
-    // Filtre de recherche par nom/téléphone/email
+    // Filtre de recherche par nom/tÃ©lÃ©phone/email
     if (search || name) {
       const q = (search || name || "").trim();
       if (q) {
@@ -305,7 +305,7 @@ export const getUsers = async (req: Request, res: Response) => {
         { model: Country, as: 'country', attributes: ['id', 'name'] },
         { model: DriverAccount, as: 'account', attributes: ['balance'] }
       ],
-      attributes: { exclude: ['password'] }, // Sécurité : on n'envoie jamais le mot de passe
+      attributes: { exclude: ['password'] }, // SÃ©curitÃ© : on n'envoie jamais le mot de passe
       order: [['createdAt', 'DESC']]
     });
 
@@ -340,7 +340,7 @@ export const updateUserAccountStatus = async (
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       });
     }
 
@@ -401,7 +401,7 @@ export const updateUserAccountStatus = async (
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -414,14 +414,14 @@ export const getUserById = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
     return res.status(200).json({ success: true, data: user });
   } catch (error: any) {
     return res
       .status(500)
-      .json({ success: false, message: error?.message || "Unknown server error" });
+      .json({ success: false, message: error?.message || "Erreur serveur inconnue" });
   }
 };
 
@@ -433,7 +433,7 @@ export const getUserHistory = async (req: Request, res: Response) => {
   } catch (error: any) {
     return res
       .status(500)
-      .json({ success: false, message: error?.message || "Unknown server error" });
+      .json({ success: false, message: error?.message || "Erreur serveur inconnue" });
   }
 };
 
@@ -456,7 +456,7 @@ export const updateIdentityVerified = async (
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       });
     }
 
@@ -485,7 +485,7 @@ export const updateIdentityVerified = async (
       after: safeUser,
     });
 
-    // Notifier le livreur en temps réel quand son dossier est validé
+    // Notifier le livreur en temps rÃ©el quand son dossier est validÃ©
     if (targetRole === "livreur" && io) {
       io.to("drivers").emit("driver:profile_updated", safeUser);
       io.to("drivers").emit("driver:verification_updated", {
@@ -566,7 +566,7 @@ export const updateIdentityVerified = async (
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -590,7 +590,7 @@ export const updateUserLocation = async (
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       });
     }
 
@@ -606,7 +606,7 @@ export const updateUserLocation = async (
       countryId: String(countryResolution.country.get("id") || ""),
     } as any);
 
-    // Emission Socket pour le temps réel
+    // Emission Socket pour le temps rÃ©el
     const io = (req as any).io;
     if (io && updatedUser) {
       emitUserLocationUpdated(io, {
@@ -628,7 +628,7 @@ export const updateUserLocation = async (
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -642,7 +642,7 @@ export const updateMyAvailability = async (
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized",
+        message: "Non authentifie",
       });
     }
 
@@ -658,7 +658,7 @@ export const updateMyAvailability = async (
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       });
     }
 
@@ -676,7 +676,7 @@ export const updateMyAvailability = async (
       return res.status(403).json({
         success: false,
         message:
-          "Votre compte doit être activé par un administrateur pour passer en ligne.",
+          "Votre compte doit Ãªtre activÃ© par un administrateur pour passer en ligne.",
       });
     }
 
@@ -688,7 +688,7 @@ export const updateMyAvailability = async (
     if (!updatedUser) {
       return res.status(404).json({
         success: false,
-        message: "User not found",
+        message: "Utilisateur introuvable",
       });
     }
 
@@ -714,7 +714,7 @@ export const updateMyAvailability = async (
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -765,7 +765,7 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: "Utilisateur supprimé avec succès.",
+      message: "Utilisateur supprimÃ© avec succÃ¨s.",
     });
   } catch (error: any) {
     return res.status(500).json({

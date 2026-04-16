@@ -10,6 +10,13 @@ import {
   isFedaPayConfigured,
   syncPaymentWithFedaPay,
 } from "../../services/fedapay.service";
+import {
+  constructStripeEventFromWebhook,
+  createStripeCheckout,
+  extractStripeSessionIdFromWebhook,
+  isStripeConfigured,
+  syncPaymentWithStripe,
+} from "../../services/stripe.service";
 import { sendPushNotification } from "../../services/notification.service";
 import DriverRevenueConfig from "../../models/driver-revenue-config.model";
 import { calculateCourseRevenueSettlement } from "../../services/revenue.service";
@@ -51,6 +58,35 @@ function canAccessOrderPayment(params: {
 
 function generateCompletionOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function normalizeRemotePaymentMethod(value: unknown) {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (normalized === "CARD" || normalized === "STRIPE") return "CARD";
+  if (normalized === "MOBILE_MONEY") return "MOBILE_MONEY";
+  return "CASH";
+}
+
+function isRemotePaymentMethod(value: unknown) {
+  const normalized = normalizeRemotePaymentMethod(value);
+  return normalized === "MOBILE_MONEY" || normalized === "CARD";
+}
+
+function resolvePaymentProvider(payment: Payment) {
+  const provider = String(payment.get("provider") || "").trim().toUpperCase();
+  if (provider === "STRIPE") return "STRIPE";
+  if (provider === "FEDAPAY") return "FEDAPAY";
+
+  const method = normalizeRemotePaymentMethod(payment.get("method"));
+  if (method === "CARD") return "STRIPE";
+  if (method === "MOBILE_MONEY") return "FEDAPAY";
+  return "";
+}
+
+function formatPaymentMethodLabel(paymentMethod: string) {
+  if (paymentMethod === "CARD") return "par carte";
+  if (paymentMethod === "MOBILE_MONEY") return "par mobile money";
+  return "en especes";
 }
 
 function paymentResponse(payment: Payment) {
@@ -258,11 +294,11 @@ async function notifyPaymentEvent(
   if (currentStatus === "PAID" && previous !== "PAID") {
     await applyRevenueSettlementIfNeeded({ payment, order });
 
-    if (paymentMethod === "MOBILE_MONEY" && driverToken) {
+    if (isRemotePaymentMethod(paymentMethod) && driverToken) {
       await sendPushNotification(
         driverToken,
         "Paiement confirme",
-        "Le paiement mobile money de la course a ete confirme.",
+        `Le paiement ${formatPaymentMethodLabel(paymentMethod)} de la course a ete confirme.`,
         {
           type: "ORDER_PAYMENT_CONFIRMED",
           orderId: String(order.get("id") || ""),
@@ -313,7 +349,7 @@ export async function createTestPaymentCheckout(req: AuthenticatedRequest, res: 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     if (!isFedaPayConfigured()) {
@@ -405,14 +441,7 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
     const requesterId = req.user?.id;
     const actorRole = normalizeRole(req.user?.role);
     if (!requesterId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
-    }
-
-    if (!isFedaPayConfigured()) {
-      return res.status(503).json({
-        success: false,
-        message: "FedaPay n'est pas configure sur ce serveur.",
-      });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const orderId = String(req.params.orderId || "").trim();
@@ -432,7 +461,7 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       orderDriverId === requesterId && ["livreur", "driver", "admin", "sous-admin"].includes(actorRole);
 
     if (!isUserRequester && !isAssignedDriverRequester) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const user = await User.findByPk(orderUserId);
@@ -460,6 +489,14 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       });
     }
 
+    const paymentMethod = normalizeRemotePaymentMethod(payment.get("method"));
+    if (paymentMethod === "CASH") {
+      return res.status(400).json({
+        success: false,
+        message: "Le paiement en ligne n'est pas disponible pour une course en especes.",
+      });
+    }
+
     if (String(payment.get("status")) === "PAID") {
       return res.status(200).json({
         success: true,
@@ -474,29 +511,76 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
 
     const amount = Math.max(100, Math.round(Number(payment.get("amount") || order.get("price") || 0)));
     const description = String(req.body?.description || `Paiement course PassKey ${orderId}`).trim();
-    const checkout = await createFedaPayCheckout({
-      payment,
-      user,
-      amount,
-      description,
-      metadata: { source: "order-payment-checkout" },
-    });
-
     payment.set("driverId", orderDriverId || null);
     payment.set("amount", amount);
     payment.set("status", "PENDING");
-    payment.set("method", "MOBILE_MONEY");
-    payment.set("provider", "FEDAPAY");
-    payment.set("providerTransactionId", checkout.transactionId);
-    payment.set("providerReference", String(checkout.transaction.reference || "").trim() || null);
-    payment.set("merchantReference", checkout.merchantReference);
-    payment.set("checkoutUrl", checkout.checkoutUrl || null);
-    payment.set("checkoutToken", checkout.checkoutToken || null);
-    payment.set("callbackUrl", checkout.callbackUrl);
-    payment.set("customerEmail", null);
+    payment.set("method", paymentMethod);
+    payment.set("customerEmail", String(user.get("email") || "").trim() || null);
     payment.set("customerPhone", String(user.get("phone") || "").trim() || null);
     payment.set("failureReason", null);
-    payment.set("rawProviderPayload", JSON.stringify(checkout.transaction));
+
+    let responsePayload: { checkoutUrl: string | null; checkoutToken: string | null; message: string };
+
+    if (paymentMethod === "MOBILE_MONEY") {
+      if (!isFedaPayConfigured()) {
+        return res.status(503).json({
+          success: false,
+          message: "FedaPay n'est pas configure sur ce serveur.",
+        });
+      }
+
+      const checkout = await createFedaPayCheckout({
+        payment,
+        user,
+        amount,
+        description,
+        metadata: { source: "order-payment-checkout" },
+      });
+
+      payment.set("provider", "FEDAPAY");
+      payment.set("providerTransactionId", checkout.transactionId);
+      payment.set("providerReference", String(checkout.transaction.reference || "").trim() || null);
+      payment.set("merchantReference", checkout.merchantReference);
+      payment.set("checkoutUrl", checkout.checkoutUrl || null);
+      payment.set("checkoutToken", checkout.checkoutToken || null);
+      payment.set("callbackUrl", checkout.callbackUrl);
+      payment.set("rawProviderPayload", JSON.stringify(checkout.transaction));
+      responsePayload = {
+        checkoutUrl: checkout.checkoutUrl || null,
+        checkoutToken: checkout.checkoutToken || null,
+        message: "Checkout FedaPay cree",
+      };
+    } else {
+      if (!isStripeConfigured()) {
+        return res.status(503).json({
+          success: false,
+          message: "Stripe n'est pas configure sur ce serveur.",
+        });
+      }
+
+      const checkout = await createStripeCheckout({
+        payment,
+        user,
+        amount,
+        description,
+        metadata: { source: "order-payment-checkout" },
+      });
+
+      payment.set("provider", "STRIPE");
+      payment.set("providerTransactionId", checkout.sessionId);
+      payment.set("providerReference", null);
+      payment.set("merchantReference", `STRIPE-${payment.get("id")}`);
+      payment.set("checkoutUrl", checkout.checkoutUrl || null);
+      payment.set("checkoutToken", null);
+      payment.set("callbackUrl", checkout.successUrl);
+      payment.set("rawProviderPayload", JSON.stringify(checkout.session));
+      responsePayload = {
+        checkoutUrl: checkout.checkoutUrl || null,
+        checkoutToken: null,
+        message: "Checkout Stripe cree",
+      };
+    }
+
     await payment.save();
 
     await emitPaymentCheckoutRequested(req, {
@@ -514,11 +598,11 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
 
     return res.status(201).json({
       success: true,
-      message: "Checkout FedaPay cree",
+      message: responsePayload.message,
       data: {
         payment: paymentResponse(payment),
-        checkoutUrl: checkout.checkoutUrl,
-        checkoutToken: checkout.checkoutToken,
+        checkoutUrl: responsePayload.checkoutUrl,
+        checkoutToken: responsePayload.checkoutToken,
       },
     });
   } catch (error) {
@@ -539,7 +623,7 @@ export async function getPaymentStatus(req: AuthenticatedRequest, res: Response)
     const requesterId = req.user?.id;
     const requesterRole = req.user?.role;
     if (!requesterId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const payment = await Payment.findByPk(req.params.paymentId);
@@ -549,7 +633,7 @@ export async function getPaymentStatus(req: AuthenticatedRequest, res: Response)
 
     const order = await Order.findByPk(String(payment.get("orderId") || ""));
     if (!canAccessOrderPayment({ requesterId, requesterRole, payment, order })) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     return res.status(200).json({
@@ -566,7 +650,7 @@ export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response
     const requesterId = req.user?.id;
     const requesterRole = req.user?.role;
     if (!requesterId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const payment = await Payment.findByPk(req.params.paymentId);
@@ -576,11 +660,16 @@ export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response
 
     const order = await Order.findByPk(String(payment.get("orderId") || ""));
     if (!canAccessOrderPayment({ requesterId, requesterRole, payment, order })) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
-    await syncPaymentWithFedaPay(payment);
+    const provider = resolvePaymentProvider(payment);
+    if (provider === "FEDAPAY") {
+      await syncPaymentWithFedaPay(payment);
+    } else if (provider === "STRIPE") {
+      await syncPaymentWithStripe(payment);
+    }
     if (order) {
       await notifyPaymentEvent(req, {
         payment,
@@ -652,6 +741,58 @@ export async function handleFedaPayCallback(req: AuthenticatedRequest, res: Resp
   }
 }
 
+export async function handleStripeCallback(req: AuthenticatedRequest, res: Response) {
+  try {
+    const paymentId = String(req.query.paymentId || "").trim();
+    const sessionId = String(req.query.session_id || "").trim();
+    if (paymentId) {
+      const payment = await Payment.findByPk(paymentId);
+      if (payment) {
+        const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
+        payment.set("callbackReceivedAt", new Date());
+        if (sessionId) {
+          payment.set("providerTransactionId", sessionId);
+        }
+        await payment.save();
+        await syncPaymentWithStripe(payment);
+        const order = await Order.findByPk(String(payment.get("orderId") || ""));
+        if (order) {
+          await notifyPaymentEvent(req, {
+            payment,
+            order,
+            previousStatus,
+            sourceEvent: "PAYMENT_CALLBACK",
+          });
+        }
+      }
+    }
+
+    const html = `<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PassKey Paiement</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #0d47a1; color: white; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
+      .card { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); border-radius:24px; padding:24px; width:min(90vw,420px); }
+      h1 { margin:0 0 12px; font-size:24px; }
+      p { margin:0; line-height:1.5; color: rgba(255,255,255,.88); }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Paiement traite</h1>
+      <p>Vous pouvez revenir dans l'application PassKey. Le statut de votre paiement Stripe est en cours de synchronisation.</p>
+    </div>
+  </body>
+</html>`;
+    res.status(200).contentType("text/html").send(html);
+  } catch {
+    res.status(200).contentType("text/html").send("<h1>Retour a PassKey</h1>");
+  }
+}
+
 export async function handleFedaPayWebhook(req: AuthenticatedRequest, res: Response) {
   try {
     const rawPayload =
@@ -662,14 +803,14 @@ export async function handleFedaPayWebhook(req: AuthenticatedRequest, res: Respo
 
     const transactionId = extractFedaPayTransactionIdFromWebhook(payload);
     if (!transactionId) {
-      return res.status(200).json({ success: true, message: "No transaction id found" });
+      return res.status(200).json({ success: true, message: "Aucun identifiant de transaction trouve" });
     }
 
     const payment = await Payment.findOne({
       where: { providerTransactionId: transactionId },
     });
     if (!payment) {
-      return res.status(200).json({ success: true, message: "Payment not found" });
+      return res.status(200).json({ success: true, message: "Paiement introuvable" });
     }
 
     const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
@@ -693,12 +834,59 @@ export async function handleFedaPayWebhook(req: AuthenticatedRequest, res: Respo
   }
 }
 
+export async function handleStripeWebhook(req: AuthenticatedRequest, res: Response) {
+  try {
+    const rawPayload =
+      Buffer.isBuffer(req.body) ? req.body.toString("utf8") : JSON.stringify(req.body || {});
+    const signatureHeader = String(req.headers["stripe-signature"] || "").trim();
+    if (!signatureHeader) {
+      return res.status(400).json({ success: false, message: "Signature Stripe manquante" });
+    }
+
+    const event = constructStripeEventFromWebhook(rawPayload, signatureHeader);
+    const sessionId = extractStripeSessionIdFromWebhook(event);
+    if (!sessionId) {
+      return res.status(200).json({ success: true, message: "Aucun identifiant de session trouve" });
+    }
+
+    const payment = await Payment.findOne({
+      where: { providerTransactionId: sessionId },
+    });
+    if (!payment) {
+      return res.status(200).json({ success: true, message: "Paiement introuvable" });
+    }
+
+    const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
+    payment.set("callbackReceivedAt", new Date());
+    payment.set("rawProviderPayload", rawPayload);
+    await payment.save();
+    await syncPaymentWithStripe(payment);
+
+    const order = await Order.findByPk(String(payment.get("orderId") || ""));
+    if (order) {
+      await notifyPaymentEvent(req, {
+        payment,
+        order,
+        previousStatus,
+        sourceEvent: "PAYMENT_WEBHOOK",
+      });
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Webhook Stripe invalide",
+    });
+  }
+}
+
 export async function selectOrderCashPayment(req: AuthenticatedRequest, res: Response) {
   try {
     const requesterId = req.user?.id;
     const requesterRole = normalizeRole(req.user?.role);
     if (!requesterId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const orderId = String(req.params.orderId || "").trim();
@@ -714,7 +902,7 @@ export async function selectOrderCashPayment(req: AuthenticatedRequest, res: Res
       orderDriverId === requesterId && ["livreur", "driver", "admin", "sous-admin"].includes(requesterRole);
 
     if (!isUserRequester && !isAssignedDriverRequester) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
     let payment = await findOrderPayment(orderId, orderUserId);
     if (!payment) {
@@ -780,10 +968,10 @@ export async function markOrderCashPaymentPaid(req: AuthenticatedRequest, res: R
     const driverId = req.user?.id;
     const role = normalizeRole(req.user?.role);
     if (!driverId) {
-      return res.status(401).json({ success: false, message: "Unauthenticated" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
     if (!["livreur", "driver", "admin", "sous-admin"].includes(role)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
+      return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
     const orderId = String(req.params.orderId || "").trim();

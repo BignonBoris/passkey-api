@@ -132,7 +132,7 @@ router.post("/admin/sign-up", authenticate, authorize(["admin"]), adminSignUp);
  *             $ref: "#/components/schemas/ForgotPasswordRequest"
  *     responses:
  *       200:
- *         description: OTP sent for password recovery
+ *         description: Code OTP envoyé pour la récupération du mot de passe
  *         content:
  *           application/json:
  *             schema:

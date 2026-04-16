@@ -24,17 +24,17 @@ export async function listDriverVehicles(req: Request, res: Response) {
     });
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list vehicles" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les vehicules" });
   }
 }
 
 export async function getDriverVehicle(req: Request, res: Response) {
   try {
     const row = await DriverVehicle.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Vehicle not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Vehicule introuvable" });
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to load vehicle" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de charger le vehicule" });
   }
 }
 
@@ -42,7 +42,7 @@ export async function createDriverVehicle(req: Request, res: Response) {
   try {
     const { driverId, type, plateNumber, brand, model, year, status, isPrimary } = req.body || {};
     if (!driverId || !type || !plateNumber) {
-      return res.status(400).json({ success: false, message: "driverId, type, plateNumber are required" });
+      return res.status(400).json({ success: false, message: "driverId, type et plateNumber sont requis" });
     }
 
     if (isPrimary === true) {
@@ -61,7 +61,7 @@ export async function createDriverVehicle(req: Request, res: Response) {
     });
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to create vehicle" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de creer le vehicule" });
   }
 }
 
@@ -69,7 +69,7 @@ export async function updateDriverVehicle(req: Request, res: Response) {
   try {
     const { type, plateNumber, brand, model, year, status, isPrimary } = req.body || {};
     const row = await DriverVehicle.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Vehicle not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Vehicule introuvable" });
 
     if (type !== undefined) row.set("type", type);
     if (plateNumber !== undefined) row.set("plateNumber", plateNumber);
@@ -87,25 +87,25 @@ export async function updateDriverVehicle(req: Request, res: Response) {
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update vehicle" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre a jour le vehicule" });
   }
 }
 
 export async function deleteDriverVehicle(req: Request, res: Response) {
   try {
     const row = await DriverVehicle.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Vehicle not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Vehicule introuvable" });
     await row.destroy();
-    return res.status(200).json({ success: true, message: "Vehicle deleted" });
+    return res.status(200).json({ success: true, message: "Vehicule supprime" });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to delete vehicle" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de supprimer le vehicule" });
   }
 }
 
 export async function activateDriverVehicle(req: Request, res: Response) {
   try {
     const row = await DriverVehicle.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Vehicle not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Vehicule introuvable" });
 
     await DriverVehicle.update({ isPrimary: false }, { where: { driverId: row.driverId } });
     row.set("isPrimary", true);
@@ -113,6 +113,6 @@ export async function activateDriverVehicle(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to activate vehicle" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible d'activer le vehicule" });
   }
 }

@@ -16,24 +16,24 @@ export async function listZones(req: Request, res: Response) {
     });
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list zones" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les zones" });
   }
 }
 
 export async function getZone(req: Request, res: Response) {
   try {
     const row = await ServiceZone.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Zone not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Zone introuvable" });
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to load zone" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de charger la zone" });
   }
 }
 
 export async function createZone(req: Request, res: Response) {
   try {
     const { name, city, status, polygon } = req.body || {};
-    if (!name) return res.status(400).json({ success: false, message: "name is required" });
+    if (!name) return res.status(400).json({ success: false, message: "Le nom est requis" });
     const countryId = await resolveCountryId(String(req.body?.countryId || ""));
     const row = await ServiceZone.create({
       countryId,
@@ -44,7 +44,7 @@ export async function createZone(req: Request, res: Response) {
     });
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to create zone" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de creer la zone" });
   }
 }
 
@@ -52,7 +52,7 @@ export async function updateZone(req: Request, res: Response) {
   try {
     const { name, city, status, polygon } = req.body || {};
     const row = await ServiceZone.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Zone not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Zone introuvable" });
 
     if (name !== undefined) row.set("name", name);
     if (city !== undefined) row.set("city", city);
@@ -62,17 +62,17 @@ export async function updateZone(req: Request, res: Response) {
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update zone" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre a jour la zone" });
   }
 }
 
 export async function deleteZone(req: Request, res: Response) {
   try {
     const row = await ServiceZone.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Zone not found" });
+    if (!row) return res.status(404).json({ success: false, message: "Zone introuvable" });
     await row.destroy();
-    return res.status(200).json({ success: true, message: "Zone deleted" });
+    return res.status(200).json({ success: true, message: "Zone supprimee" });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to delete zone" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de supprimer la zone" });
   }
 }

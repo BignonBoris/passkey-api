@@ -65,7 +65,7 @@ export async function assignUserCountryByGps(req: Request, res: Response) {
 
     const user = await User.findByPk(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
     const resolution = await resolveCountryFromCoordinates(latitude, longitude);

@@ -232,12 +232,12 @@ export async function createFedaPayCheckout(params: {
   metadata?: Record<string, unknown>;
 }) {
   if (!isFedaPayConfigured()) {
-    throw new Error("FedaPay is not configured on this server.");
+    throw new Error("FedaPay n'est pas configure sur ce serveur.");
   }
 
   const amount = Math.round(Number(params.amount || 0));
   if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("Invalid payment amount.");
+    throw new Error("Montant de paiement invalide.");
   }
 
   const callbackUrl = buildCallbackUrl(params.payment.id);
@@ -326,7 +326,7 @@ export async function createFedaPayCheckout(params: {
 export async function retrieveFedaPayTransaction(transactionId: string | number) {
   const normalizedId = String(transactionId || "").trim();
   if (!normalizedId) {
-    throw new Error("Missing FedaPay transaction id.");
+    throw new Error("L'identifiant de transaction FedaPay est manquant.");
   }
   const transactionUrl = `${getFedaPayApiBaseUrl()}/transactions/${normalizedId}`;
 

@@ -12,7 +12,7 @@ import { swaggerSpec } from "./docs/swagger";
 import { errorHandler } from "./middlewares/errorHandler";
 import { emitUserLocationUpdated } from "./realtime/location.events";
 import { setSocketServer } from "./realtime/socket.instance";
-import { handleFedaPayWebhook } from "./modules/payments/payments.controller";
+import { handleFedaPayWebhook, handleStripeWebhook } from "./modules/payments/payments.controller";
 import { resolveCountryFromCoordinates } from "./services/country.service";
 
 const app = express();
@@ -20,6 +20,7 @@ const app = express();
 app.use(cors());
 app.use(helmet());
 app.post("/api/payments/webhooks/fedapay", express.raw({ type: "application/json" }), handleFedaPayWebhook);
+app.post("/api/payments/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 

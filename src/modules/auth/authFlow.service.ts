@@ -42,14 +42,14 @@ export class AuthFlowService {
     const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
     if (normalizedPhone === "INVALID_PHONE") {
       return {
-        error: "Votre numéro est invalide.",
+        error: "Votre numÃ©ro est invalide.",
         nextStep: "INVALID_PHONE"
       };
     }
 
-    // 2. Recherche en base de données avec le numéro PROPRE (normalisé)
+    // 2. Recherche en base de donnÃ©es avec le numÃ©ro PROPRE (normalisÃ©)
 
-    // Modification CRUCIALE : On cherche si le numéro existe DÉJÀ avec ce RÔLE précis
+    // Modification CRUCIALE : On cherche si le numÃ©ro existe DÃ‰JÃ€ avec ce RÃ”LE prÃ©cis
     const existingUserWithRole = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     // const user = await UserRepository.findByPhone(normalizedPhone);
@@ -62,7 +62,7 @@ export class AuthFlowService {
     let nextStep = "REGISTER";
     let error = "";
     if (isSuspended) {
-      error = "Votre compte a été suspendu";
+      error = "Votre compte a Ã©tÃ© suspendu";
       nextStep = "SUSPENDED ";
     }
     else if (exists && matchesProfile) {
@@ -74,7 +74,7 @@ export class AuthFlowService {
     return {
       error,
       exists,
-      normalizedPhone, // On renvoie le numéro propre pour la suite (OTP/Login)
+      normalizedPhone, // On renvoie le numÃ©ro propre pour la suite (OTP/Login)
       matchesProfile,
       isSuspended,
       foundRole,
@@ -89,7 +89,7 @@ export class AuthFlowService {
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     if (!user) {
-      return { success: false, status: 404, message: "User not found" };
+      return { success: false, status: 404, message: "Utilisateur introuvable" };
     }
 
     if (user.accountStatus === "suspended") {
@@ -97,19 +97,19 @@ export class AuthFlowService {
     }
 
     if (user.role === "admin" || user.role === "sous-admin") {
-      return { success: false, status: 403, message: "Use admin sign-in endpoint" };
+      return { success: false, status: 403, message: "Utilisez le point d'entrée de connexion administrateur." };
     }
 
     const isValid = user.password ? await bcrypt.compare(password, user.password) : false;
     if (!isValid) {
-      return { success: false, status: 401, message: "Invalid password" };
+      return { success: false, status: 401, message: "Mot de passe invalide" };
     }
 
     const otp = await saveOtp(normalizedPhone, role);
     return {
       success: true,
       status: 200,
-      message: "OTP sent",
+      message: "Code OTP envoyé",
       data: { userId: user.id, otp },
     };
   }
@@ -117,18 +117,18 @@ export class AuthFlowService {
   // services/auth-flow.service.ts
   static async resendOtp(phone: string, role: string) {
     const normalizedPhone = await nomalizeCustomerPhone(phone);
-    // 1. Trouver l'utilisateur par téléphone ET rôle
+    // 1. Trouver l'utilisateur par tÃ©lÃ©phone ET rÃ´le
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     if (!user) {
       return { success: false, status: 404, message: "Utilisateur introuvable pour ce profil." };
     }
 
-    // 2. Générer un nouvel OTP (6 chiffres)
+    // 2. GÃ©nÃ©rer un nouvel OTP (6 chiffres)
     const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60000); // Expire dans 5 minutes
 
-    // 3. Mettre à jour dans la DB (Utilise ton modèle Sequelize)
+    // 3. Mettre Ã  jour dans la DB (Utilise ton modÃ¨le Sequelize)
     await User.update(
       {
         otpCode: newOtp,
@@ -137,14 +137,14 @@ export class AuthFlowService {
       { where: { id: user.id } }
     );
 
-    // 4. Envoi du SMS réel (Simulation ou Provider réel)
+    // 4. Envoi du SMS rÃ©el (Simulation ou Provider rÃ©el)
     await SmsService.sendOtp(phone, newOtp);
 
     return {
       success: true,
       status: 200,
-      message: "Un nouveau code a été envoyé par SMS.",
-      // 💡 CONSEIL SENIOR : En production, ne renvoie JAMAIS l'OTP dans la réponse JSON.
+      message: "Un nouveau code a Ã©tÃ© envoyÃ© par SMS.",
+      // ðŸ’¡ CONSEIL SENIOR : En production, ne renvoie JAMAIS l'OTP dans la rÃ©ponse JSON.
       // On le laisse ici pour tes tests Flutter.
       data: { otp: newOtp }
     };
@@ -152,15 +152,15 @@ export class AuthFlowService {
 
   static async signUp(phone: string, password: string, role: string) {
     if (role !== "usager" && role !== "livreur") {
-      return { success: false, status: 400, message: "Role must be usager or livreur" };
+      return { success: false, status: 400, message: "Le rôle doit être usager ou livreur." };
     }
     const normalizedPhone = await nomalizeCustomerPhone(phone);
     if (normalizedPhone === "INVALID_PHONE") {
-      return { success: false, status: 400, message: "Invalid phone number" };
+      return { success: false, status: 400, message: "Numéro de téléphone invalide." };
     }
     const existingUser = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     if (existingUser) {
-      return { success: false, status: 409, message: `L'utilisateur avec le numéro ${normalizedPhone} existe déjà comme ${role}.` };
+      return { success: false, status: 409, message: `L'utilisateur avec le numÃ©ro ${normalizedPhone} existe dÃ©jÃ  comme ${role}.` };
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -170,15 +170,16 @@ export class AuthFlowService {
     return {
       success: true,
       status: 201,
-      message: "Account created. OTP sent",
+      message: "Compte créé. Code OTP envoyé.",
       data: { userId: user.id, otp },
     };
   }
 
   static async forgotPassword(phone: string) {
-    const user = await UserRepository.findByPhone(phone);
+    const normalizedPhone = await nomalizeCustomerPhone(phone);
+    const user = await UserRepository.findByPhone(normalizedPhone);
     if (!user) {
-      return { success: false, status: 404, message: "User not found" };
+      return { success: false, status: 404, message: "Utilisateur introuvable" };
     }
 
     if (user.accountStatus === "suspended") {
@@ -189,7 +190,7 @@ export class AuthFlowService {
     return {
       success: true,
       status: 200,
-      message: "OTP sent",
+      message: "Code OTP envoyé",
       data: { userId: user.id, otp },
     };
   }
@@ -197,7 +198,7 @@ export class AuthFlowService {
   static async recoverPassword(phone: string, otp: string, newPassword: string) {
     const user = await UserRepository.findByPhone(phone);
     if (!user) {
-      return { success: false, status: 404, message: "User not found" };
+      return { success: false, status: 404, message: "Utilisateur introuvable" };
     }
 
     const now = new Date();
@@ -207,7 +208,7 @@ export class AuthFlowService {
       !user.otpExpiresAt ||
       user.otpExpiresAt < now
     ) {
-      return { success: false, status: 400, message: "Invalid or expired OTP" };
+      return { success: false, status: 400, message: "Le code OTP est invalide ou expiré." };
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -239,7 +240,7 @@ export class AuthFlowService {
 
     const isValid = user.password ? await bcrypt.compare(password, user.password) : false;
     if (!isValid) {
-      return { success: false, status: 401, message: "Invalid password" };
+      return { success: false, status: 401, message: "Mot de passe invalide" };
     }
 
     const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
@@ -264,7 +265,7 @@ export class AuthFlowService {
   static async adminSignUp(input: AdminSignUpInput) {
     const existingEmail = await UserRepository.findByEmail(input.email);
     if (existingEmail) {
-      return { success: false, status: 409, message: "Cet email existe déjà." };
+      return { success: false, status: 409, message: "Cet email existe dÃ©jÃ ." };
     }
 
     const hashedPassword = await bcrypt.hash(input.password, 10);
@@ -280,7 +281,7 @@ export class AuthFlowService {
     return {
       success: true,
       status: 201,
-      message: "Compte admin créé avec succès.",
+      message: "Compte admin crÃ©Ã© avec succÃ¨s.",
       data: {
         userId: user.id,
       },

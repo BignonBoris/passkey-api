@@ -16,7 +16,7 @@ export async function login(req: Request, res: Response) {
 
   res.json({
     success: true,
-    message: "OTP sent",
+    message: "Code OTP envoyé",
     data: result,
   });
 }

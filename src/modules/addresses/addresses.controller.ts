@@ -25,7 +25,7 @@ export const listMyAddresses = async (req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const search = String(req.query?.search ?? "").trim();
@@ -53,7 +53,7 @@ export const listMyAddresses = async (req: AuthenticatedRequest, res: Response) 
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -62,7 +62,7 @@ export const createMyAddress = async (req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const label = String(req.body?.label ?? "").trim();
@@ -100,7 +100,7 @@ export const createMyAddress = async (req: AuthenticatedRequest, res: Response) 
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -109,7 +109,7 @@ export const updateMyAddress = async (req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const addressId = String(req.params?.id ?? "").trim();
@@ -157,7 +157,7 @@ export const updateMyAddress = async (req: AuthenticatedRequest, res: Response) 
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };
@@ -166,7 +166,7 @@ export const deleteMyAddress = async (req: AuthenticatedRequest, res: Response) 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized" });
+      return res.status(401).json({ success: false, message: "Non authentifie" });
     }
 
     const addressId = String(req.params?.id ?? "").trim();
@@ -188,7 +188,7 @@ export const deleteMyAddress = async (req: AuthenticatedRequest, res: Response) 
   } catch (error: any) {
     return res.status(500).json({
       success: false,
-      message: error?.message || "Unknown server error",
+      message: error?.message || "Erreur serveur inconnue",
     });
   }
 };

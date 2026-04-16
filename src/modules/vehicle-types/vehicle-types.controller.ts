@@ -76,7 +76,7 @@ export async function listVehicleTypes(req: Request, res: Response) {
       data: rows.map((row) => mapVehicleType(row)),
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list vehicle types" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les types de vehicule" });
   }
 }
 
@@ -116,7 +116,7 @@ export async function createVehicleType(req: Request, res: Response) {
 
     return res.status(201).json({ success: true, data: mapVehicleType(row) });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to create vehicle type" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de creer le type de vehicule" });
   }
 }
 
@@ -181,7 +181,7 @@ export async function updateVehicleType(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: mapVehicleType(row) });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update vehicle type" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre a jour le type de vehicule" });
   }
 }
 
@@ -200,7 +200,7 @@ export async function deleteVehicleType(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, message: "Type de vehicule supprime." });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to delete vehicle type" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de supprimer le type de vehicule" });
   }
 }
 
@@ -220,7 +220,7 @@ export async function activateVehicleType(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: mapVehicleType(row) });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to activate vehicle type" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible d'activer le type de vehicule" });
   }
 }
 
@@ -236,6 +236,6 @@ export async function deactivateVehicleType(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: mapVehicleType(row) });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to deactivate vehicle type" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de desactiver le type de vehicule" });
   }
 }

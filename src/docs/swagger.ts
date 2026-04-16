@@ -130,7 +130,7 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           properties: {
             success: { type: "boolean", example: true },
-            message: { type: "string", example: "OTP sent" },
+            message: { type: "string", example: "Code OTP envoyé" },
             data: {
               type: "object",
               properties: {

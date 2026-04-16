@@ -24,7 +24,7 @@ export async function listPublicFaqs(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list public faqs" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les FAQ publiques" });
   }
 }
 
@@ -49,7 +49,7 @@ export async function listFaqs(req: Request, res: Response) {
 
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to list faqs" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de lister les FAQ" });
   }
 }
 
@@ -58,15 +58,15 @@ export async function createFaq(req: Request, res: Response) {
     const { question, answer, status } = req.body || {};
 
     if (!question || !String(question).trim()) {
-      return res.status(400).json({ success: false, message: "question is required" });
+      return res.status(400).json({ success: false, message: "La question est requise" });
     }
     if (!answer || !String(answer).trim()) {
-      return res.status(400).json({ success: false, message: "answer is required" });
+      return res.status(400).json({ success: false, message: "La reponse est requise" });
     }
     if (String(question).trim().length > MAX_FAQ_QUESTION_LENGTH) {
       return res.status(400).json({
         success: false,
-        message: `question must not exceed ${MAX_FAQ_QUESTION_LENGTH} characters`,
+        message: `La question ne doit pas depasser ${MAX_FAQ_QUESTION_LENGTH} characters`,
       });
     }
 
@@ -78,24 +78,24 @@ export async function createFaq(req: Request, res: Response) {
 
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to create faq" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de creer la FAQ" });
   }
 }
 
 export async function updateFaq(req: Request, res: Response) {
   try {
     const row = await Faq.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Faq not found" });
+    if (!row) return res.status(404).json({ success: false, message: "FAQ introuvable" });
 
     const { question, answer, status } = req.body || {};
 
     if (question !== undefined) {
       const value = String(question).trim();
-      if (!value) return res.status(400).json({ success: false, message: "question cannot be empty" });
+      if (!value) return res.status(400).json({ success: false, message: "La question ne peut pas etre vide" });
       if (value.length > MAX_FAQ_QUESTION_LENGTH) {
         return res.status(400).json({
           success: false,
-          message: `question must not exceed ${MAX_FAQ_QUESTION_LENGTH} characters`,
+          message: `La question ne doit pas depasser ${MAX_FAQ_QUESTION_LENGTH} characters`,
         });
       }
       row.set("question", value);
@@ -103,13 +103,13 @@ export async function updateFaq(req: Request, res: Response) {
 
     if (answer !== undefined) {
       const value = String(answer).trim();
-      if (!value) return res.status(400).json({ success: false, message: "answer cannot be empty" });
+      if (!value) return res.status(400).json({ success: false, message: "La reponse ne peut pas etre vide" });
       row.set("answer", value);
     }
 
     if (status !== undefined) {
       if (status !== "ACTIVE" && status !== "INACTIVE") {
-        return res.status(400).json({ success: false, message: "status must be ACTIVE or INACTIVE" });
+        return res.status(400).json({ success: false, message: "Le statut doit etre ACTIVE ou INACTIVE" });
       }
       row.set("status", status);
     }
@@ -117,17 +117,17 @@ export async function updateFaq(req: Request, res: Response) {
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to update faq" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre a jour la FAQ" });
   }
 }
 
 export async function deleteFaq(req: Request, res: Response) {
   try {
     const row = await Faq.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Faq not found" });
+    if (!row) return res.status(404).json({ success: false, message: "FAQ introuvable" });
     await row.destroy();
-    return res.status(200).json({ success: true, message: "Faq deleted" });
+    return res.status(200).json({ success: true, message: "FAQ supprimee" });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error?.message || "Failed to delete faq" });
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de supprimer la FAQ" });
   }
 }
