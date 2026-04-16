@@ -19,6 +19,7 @@ import { resolveCountryId } from "../../services/country.service";
 import AppSettings from '../../models/app-settings.model';
 import sequelize from '../../config/database';
 import { AuthenticatedRequest } from '../../types/auth-request';
+import { emitDriverOrderLocationUpdated } from '../../realtime/location.events';
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -926,7 +927,21 @@ export const updateDriverLocationForDelivery = async (req: Request, res: Respons
     const { driverId, latitude, longitude } = req.body;
     await User.update({ latitude, longitude }, { where: { id: driverId } });
     const io: Server = (req as any).io;
-    io.to(`user_${orderId}`).emit("driver_location_updated", { orderId, driverId, latitude, longitude });
+    const order = await Order.findByPk(orderId);
+    const status = String(order?.get('status') || '').trim();
+    const payload = {
+      orderId,
+      driverId,
+      userId: driverId,
+      role: 'livreur',
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      status,
+      locationUpdatedAt: new Date().toISOString(),
+    };
+    io.to(`order_${orderId}`).emit("order:driver_location_updated", payload);
+    io.to(`order_${orderId}`).emit("driver_location_updated", payload);
+    await emitDriverOrderLocationUpdated(io, payload);
     return res.status(200).json({ success: true });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
@@ -936,8 +951,24 @@ export const getDeliveryTracking = async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const order = await Order.findByPk(orderId, { raw: true });
     let driver = null;
-    if (order?.driverId) driver = await User.findByPk(order.driverId, { raw: true });
-    return res.status(200).json({ success: true, data: { order, driver } });
+    let vehicle = null;
+    if (order?.driverId) {
+      const vehicleWhere: Record<string, unknown> = { driverId: order.driverId };
+      if (order.driverVehicleId) {
+        vehicleWhere.id = order.driverVehicleId;
+      }
+      const [driverResult, vehicleResult] = await Promise.all([
+        User.findByPk(order.driverId, { raw: true }),
+        DriverVehicle.findOne({
+          where: vehicleWhere,
+          order: [["createdAt", "DESC"]],
+          raw: true,
+        }),
+      ]);
+      driver = driverResult;
+      vehicle = vehicleResult;
+    }
+    return res.status(200).json({ success: true, data: { order, driver, vehicle } });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
 

@@ -10,7 +10,10 @@ import User from "./models/user.model";
 import routes from "./routes";
 import { swaggerSpec } from "./docs/swagger";
 import { errorHandler } from "./middlewares/errorHandler";
-import { emitUserLocationUpdated } from "./realtime/location.events";
+import {
+  emitDriverOrderLocationUpdated,
+  emitUserLocationUpdated,
+} from "./realtime/location.events";
 import { setSocketServer } from "./realtime/socket.instance";
 import { handleFedaPayWebhook, handleStripeWebhook } from "./modules/payments/payments.controller";
 import { resolveCountryFromCoordinates } from "./services/country.service";
@@ -167,6 +170,13 @@ io.on("connection", (socket) => {
     );
 
     emitUserLocationUpdated(io, {
+      userId,
+      role: role || "usager",
+      latitude,
+      longitude,
+      locationUpdatedAt: locationUpdatedAt.toISOString(),
+    });
+    await emitDriverOrderLocationUpdated(io, {
       userId,
       role: role || "usager",
       latitude,
