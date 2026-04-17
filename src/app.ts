@@ -11,7 +11,6 @@ import routes from "./routes";
 import { swaggerSpec } from "./docs/swagger";
 import { errorHandler } from "./middlewares/errorHandler";
 import {
-  emitDriverOrderLocationUpdated,
   emitUserLocationUpdated,
 } from "./realtime/location.events";
 import { setSocketServer } from "./realtime/socket.instance";
@@ -170,13 +169,6 @@ io.on("connection", (socket) => {
     );
 
     emitUserLocationUpdated(io, {
-      userId,
-      role: role || "usager",
-      latitude,
-      longitude,
-      locationUpdatedAt: locationUpdatedAt.toISOString(),
-    });
-    await emitDriverOrderLocationUpdated(io, {
       userId,
       role: role || "usager",
       latitude,
