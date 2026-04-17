@@ -232,6 +232,8 @@ async function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) 
   const pickupCoords = parseLatLng(String(order.get('pickupLocation') || ''));
   const destinationCoords = parseLatLng(String(order.get('destinationLocation') || ''));
   const customer = userId ? await User.findByPk(userId) : null;
+  const rawSearchStartedAt = order.get('searchStartedAt') || new Date();
+  const searchStartedAtIso = new Date(String(rawSearchStartedAt)).toISOString();
 
   return {
     type: "NEW_DELIVERY_REQUEST",
@@ -270,8 +272,9 @@ async function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) 
     user_phone: String(customer?.get('phone') || ''),
     user_rating: String(Number(customer?.get('rating') || 0)),
     status: String(order.get('status') || 'PENDING'),
-    createdAt: new Date().toISOString(),
-    timestamp: new Date().toISOString(),
+    createdAt: searchStartedAtIso,
+    timestamp: searchStartedAtIso,
+    searchStartedAt: searchStartedAtIso,
   };
 }
 
@@ -363,6 +366,7 @@ export const createOrder = async (req: Request, res: Response) => {
       price: pricing.price, distance, revenuePerDelivery: pricing.driverEarnings,
       platformCommission: pricing.platformCommission, serviceFee: pricing.serviceFee,
       completionOtp: generateCompletionOtp(), vehicleType: vehicleId, status: "PENDING",
+      searchStartedAt: new Date(),
       pricingSnapshotJson: JSON.stringify(pricing.snapshot),
       parcelNature,
       packageDescription: parcelNature,
@@ -544,6 +548,9 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     if (status === 'ACCEPTED' && order.get('status') !== 'PENDING') return res.status(400).json({ success: false, message: "Déjà acceptée par un autre livreur" });
     const previousStatus = String(order.get('status') || '').trim().toUpperCase();
     const updateData: any = { status };
+    if (status === 'PENDING' && previousStatus === 'NO_DRIVER_FOUND') {
+      updateData.searchStartedAt = new Date();
+    }
     if (driverId) updateData.driverId = driverId;
     if (status === "ACCEPTED" && driverId) {
       const activeVehicle = await DriverVehicle.findOne({ where: { driverId, isPrimary: true }, order: [["createdAt", "DESC"]] });
@@ -559,14 +566,23 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       if (currentDriverId) await User.update({ isAvailable: true }, { where: { id: currentDriverId } });
     }
     await Order.update(updateData, { where: { id: orderId } });
+    const refreshedOrder = await Order.findByPk(orderId);
+    const orderForEvents = refreshedOrder ?? order;
     const { paymentMethod, paymentStatus } = await getOrderPaymentSnapshot(orderId);
     const io: Server = (req as any).io;
-    const payload = { orderId, status, driverId: driverId || order.get('driverId'), payment_method: paymentMethod, payment_status: paymentStatus };
-    io.to(`user_${order.get('userId')}`).emit('order_status_changed', payload);
+    const payload = {
+      orderId,
+      status,
+      driverId: driverId || orderForEvents.get('driverId'),
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      searchStartedAt: orderForEvents.get('searchStartedAt'),
+    };
+    io.to(`user_${orderForEvents.get('userId')}`).emit('order_status_changed', payload);
     if (status === 'ACCEPTED') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
       orderId,
       requestId: orderId,
-      acceptedByDriverId: String(driverId || order.get('driverId') || ''),
+      acceptedByDriverId: String(driverId || orderForEvents.get('driverId') || ''),
     });
     if (status === 'NO_DRIVER_FOUND') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
       orderId,
@@ -578,11 +594,11 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
         where: { orderId },
         order: [["createdAt", "DESC"]],
       });
-      notifyNearbyDrivers(order, io, null, paymentRow).catch(console.error);
+      notifyNearbyDrivers(orderForEvents, io, null, paymentRow).catch(console.error);
     }
-    if (status === "COMPLETED") await notifyUserDeliveryStep(order, { title: "Livraison terminee", body: "Merci!", type: "ORDER_COMPLETED" });
+    if (status === "COMPLETED") await notifyUserDeliveryStep(orderForEvents, { title: "Livraison terminee", body: "Merci!", type: "ORDER_COMPLETED" });
     if (status === "ACCEPTED") {
-      await notifyUserDeliveryStep(order, {
+      await notifyUserDeliveryStep(orderForEvents, {
         title: "Livreur trouvé",
         body: "Un livreur a accepté votre commande, suivez-le sur la carte.",
         type: "DRIVER_ACCEPTED",

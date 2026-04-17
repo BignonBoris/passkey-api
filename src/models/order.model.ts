@@ -10,6 +10,7 @@ class Order extends Model {
   public driverId?: string;
   public driverVehicleId?: string;
   public completionOtp!: string;
+  public searchStartedAt!: Date;
   public completionOtpValidatedAt?: Date | null;
   public pickupLocation!: string;
   public pickupAddress!: string;
@@ -83,6 +84,11 @@ Order.init(
     completionOtp: {
       type: DataTypes.STRING(6),
       allowNull: false,
+    },
+    searchStartedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
     },
     completionOtpValidatedAt: {
       type: DataTypes.DATE,
