@@ -10,6 +10,7 @@ import {
   getOrders,
   driverArrivedPickup,
   driverLeftPickup,
+  broadcastDriverLocationForDelivery,
   cancelDelivery,
   estimateCancellation,
   submitOrderRating,
@@ -376,6 +377,7 @@ router.patch('/deliveries/:orderId/status', updateDeliveryStatus);
  *         description: Position mise à jour
  */
 router.patch('/deliveries/:orderId/driver-location', updateDriverLocationForDelivery);
+router.patch('/deliveries/:orderId/driver-location/live', broadcastDriverLocationForDelivery);
 
 /**
  * @swagger

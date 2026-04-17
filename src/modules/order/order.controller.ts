@@ -945,6 +945,56 @@ export const updateDriverLocationForDelivery = async (req: Request, res: Respons
   } catch (error) { return res.status(500).json({ success: false }); }
 };
 
+export const broadcastDriverLocationForDelivery = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { driverId, latitude, longitude } = req.body;
+
+    const order = await Order.findByPk(orderId, { raw: true });
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Course introuvable" });
+    }
+
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    const normalizedDriverId = String(driverId || order.driverId || "").trim();
+    if (!normalizedDriverId || Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({
+        success: false,
+        message: "driverId, latitude et longitude sont requis",
+      });
+    }
+
+    const status = String(order.status || "").trim();
+    const payload = {
+      orderId,
+      driverId: normalizedDriverId,
+      userId: normalizedDriverId,
+      role: "livreur",
+      latitude: lat,
+      longitude: lng,
+      status,
+      locationUpdatedAt: new Date().toISOString(),
+    };
+
+    const io: Server = (req as any).io;
+    io.to(`order_${orderId}`).emit("order:driver_location_updated", payload);
+    io.to(`order_${orderId}`).emit("driver_location_updated", payload);
+    io.to(`user_${String(order.userId || "").trim()}`).emit(
+      "order:driver_location_updated",
+      payload,
+    );
+    io.to(`user_${String(order.userId || "").trim()}`).emit(
+      "driver_location_updated",
+      payload,
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false });
+  }
+};
+
 export const getDeliveryTracking = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
