@@ -19,6 +19,7 @@ import { resolveCountryId } from "../../services/country.service";
 import AppSettings from '../../models/app-settings.model';
 import sequelize from '../../config/database';
 import { AuthenticatedRequest } from '../../types/auth-request';
+import { emitDriverOrderLocationUpdated } from '../../realtime/location.events';
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -941,6 +942,22 @@ export const updateDriverLocationForDelivery = async (req: Request, res: Respons
     const { orderId } = req.params;
     const { driverId, latitude, longitude } = req.body;
     await User.update({ latitude, longitude }, { where: { id: driverId } });
+    const io: Server = (req as any).io;
+    const order = await Order.findByPk(orderId);
+    const status = String(order?.get('status') || '').trim();
+    const payload = {
+      orderId,
+      driverId,
+      userId: driverId,
+      role: 'livreur',
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      status,
+      locationUpdatedAt: new Date().toISOString(),
+    };
+    io.to(`order_${orderId}`).emit("order:driver_location_updated", payload);
+    io.to(`order_${orderId}`).emit("driver_location_updated", payload);
+    await emitDriverOrderLocationUpdated(io, payload);
     return res.status(200).json({ success: true });
   } catch (error) { return res.status(500).json({ success: false }); }
 };

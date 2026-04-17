@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from "../../types/auth-request";
 import { StatusHistoryRepository } from "../../repositories/status-history.repository";
 import { sendPushNotification, sendSmsNotification } from "../../services/notification.service";
 import {
+  emitDriverOrderLocationUpdated,
   emitUserLocationUpdated,
 } from "../../realtime/location.events";
 import { resolveCountryFromCoordinates } from "../../services/country.service";
@@ -612,6 +613,13 @@ export const updateUserLocation = async (
     const io = (req as any).io;
     if (io && updatedUser) {
       emitUserLocationUpdated(io, {
+        userId,
+        role: String((updatedUser as any).role || "usager"),
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        locationUpdatedAt: new Date().toISOString(),
+      });
+      await emitDriverOrderLocationUpdated(io, {
         userId,
         role: String((updatedUser as any).role || "usager"),
         latitude: Number(latitude),
