@@ -143,7 +143,17 @@ async function applyRevenueSettlementIfNeeded(params: {
   const config = await resolveDriverRevenueConfigForOrder(order);
   if (!config) return;
 
-  const courseAmount = Number(payment.get("amount") || order.get("price") || 0);
+  let courseAmount = Number(payment.get("amount") || order.get("price") || 0);
+  const flowType = String(order.get("flowType") || "STANDARD").trim().toUpperCase();
+  if (flowType === "RETURN") {
+    try {
+      const context = JSON.parse(String(order.get("returnContextJson") || "{}")) as Record<string, unknown>;
+      const revenueBaseAmount = Number(context.revenueBaseAmount ?? context.returnAmount ?? 0);
+      if (Number.isFinite(revenueBaseAmount) && revenueBaseAmount > 0) {
+        courseAmount = revenueBaseAmount;
+      }
+    } catch (_) {}
+  }
   const settlement = calculateCourseRevenueSettlement(config, { courseAmount });
 
   if (settlement.driverRevenue > 0) {
@@ -208,6 +218,8 @@ async function emitPaymentStatusChanged(
     actorRole: actorRole || null,
     pickupAddress: String(order.get("pickupAddress") || ""),
     destinationAddress: String(order.get("destinationAddress") || ""),
+    paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
+    paymentCheckoutStartedAt: order.get("paymentCheckoutStartedAt") || null,
   };
 
   io?.to(`user_${order.get("userId")}`).emit("payment_status_changed", payload);
@@ -239,6 +251,8 @@ async function emitPaymentCheckoutRequested(
     actorRole: actorRole || null,
     pickupAddress: String(order.get("pickupAddress") || ""),
     destinationAddress: String(order.get("destinationAddress") || ""),
+    paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
+    paymentCheckoutStartedAt: order.get("paymentCheckoutStartedAt") || null,
   };
 
   io?.to(`user_${order.get("userId")}`).emit("payment_checkout_requested", payload);
@@ -581,6 +595,9 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       };
     }
 
+    order.set("paymentCheckoutStartedAt", new Date());
+    order.set("paymentPromptDeadlineAt", null);
+    await order.save();
     await payment.save();
 
     await emitPaymentCheckoutRequested(req, {
@@ -671,6 +688,11 @@ export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response
       await syncPaymentWithStripe(payment);
     }
     if (order) {
+      if (String(payment.get("status") || "").trim().toUpperCase() === "PAID") {
+        order.set("paymentPromptDeadlineAt", null);
+        order.set("paymentCheckoutStartedAt", null);
+        await order.save();
+      }
       await notifyPaymentEvent(req, {
         payment,
         order,

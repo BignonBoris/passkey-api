@@ -1,6 +1,7 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config/database";
 import User from "./user.model";
+import Country from "./country.model";
 import { DEFAULT_COUNTRY_ID } from "../constants/countries";
 
 class Order extends Model {
@@ -9,8 +10,12 @@ class Order extends Model {
   public userId!: string;
   public driverId?: string;
   public driverVehicleId?: string;
+  public parentOrderId?: string | null;
+  public returnOrderId?: string | null;
   public completionOtp!: string;
   public searchStartedAt!: Date;
+  public paymentPromptDeadlineAt?: Date | null;
+  public paymentCheckoutStartedAt?: Date | null;
   public completionOtpValidatedAt?: Date | null;
   public pickupLocation!: string;
   public pickupAddress!: string;
@@ -26,6 +31,8 @@ class Order extends Model {
   public merchantName?: string | null;
   public itemCount!: number;
   public foodOrderPayloadJson?: string | null;
+  public flowType!: string;
+  public returnContextJson?: string | null;
   public vehicleType!: string;
   public status!: string;
   public driverArrivedPickupAt?: Date | null;
@@ -35,6 +42,8 @@ class Order extends Model {
   public waitingFee!: number;
   public cancelledAt?: Date | null;
   public cancelledBy?: string | null;
+  public cancellationReason?: string | null;
+  public cancelledAfterPickupAt?: Date | null;
   public cancellationFee!: number;
   public peakSurcharge!: number;
   public nightSurcharge!: number;
@@ -51,6 +60,8 @@ class Order extends Model {
   public userRatedAt?: Date | null;
   public ratedByDriverId?: string | null;
   public isArchived!: boolean;
+  public searchFailureCount!: number;
+  public driverSearchStatsJson?: string | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -81,6 +92,14 @@ Order.init(
       type: DataTypes.UUID,
       allowNull: true,
     },
+    parentOrderId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    returnOrderId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
     completionOtp: {
       type: DataTypes.STRING(6),
       allowNull: false,
@@ -89,6 +108,14 @@ Order.init(
       type: DataTypes.DATE,
       allowNull: false,
       defaultValue: DataTypes.NOW,
+    },
+    paymentPromptDeadlineAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    paymentCheckoutStartedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     completionOtpValidatedAt: {
       type: DataTypes.DATE,
@@ -152,6 +179,15 @@ Order.init(
       defaultValue: 0,
     },
     foodOrderPayloadJson: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
+    },
+    flowType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "STANDARD",
+    },
+    returnContextJson: {
       type: DataTypes.TEXT("long"),
       allowNull: true,
     },
@@ -266,6 +302,14 @@ Order.init(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    cancellationReason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    cancelledAfterPickupAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     cancellationFee: {
       type: DataTypes.FLOAT,
       allowNull: false,
@@ -275,6 +319,15 @@ Order.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    searchFailureCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    driverSearchStatsJson: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
     },
   },
   {
@@ -289,5 +342,6 @@ User.hasMany(Order, { foreignKey: "userId", as: "clientOrders" });
 Order.belongsTo(User, { foreignKey: "userId", as: "client" });
 User.hasMany(Order, { foreignKey: "driverId", as: "driverOrders" });
 Order.belongsTo(User, { foreignKey: "driverId", as: "driver" });
+Order.belongsTo(Country, { foreignKey: "countryId", as: "country" });
 
 export default Order;

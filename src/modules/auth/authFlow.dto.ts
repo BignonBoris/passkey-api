@@ -31,6 +31,7 @@ export const recoverPasswordSchema = z.object({
 export const adminSignInSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  captchaToken: z.string().optional(),
 });
 
 export const adminSignUpSchema = z.object({

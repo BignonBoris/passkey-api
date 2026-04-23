@@ -17,11 +17,16 @@ const router = Router();
  *             type: object
  *             required:
  *               - phone
+ *               - role
  *               - otp
  *             properties:
  *               phone:
  *                 type: string
  *                 example: "+22961234567"
+ *               role:
+ *                 type: string
+ *                 enum: [usager, livreur, admin, sous-admin]
+ *                 example: "usager"
  *               otp:
  *                 type: string
  *                 example: "123456"

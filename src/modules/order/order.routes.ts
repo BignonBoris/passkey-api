@@ -2,7 +2,9 @@ import {
   acceptDeliveryByDriver,
   assignNearestDriver,
   archiveOrder,
+  adminCancelDelivery,
   bulkDeleteOrders,
+  confirmCancelAfterPickupFlow,
   createDeliveryRequest,
   createOrder,
   deleteOrder,
@@ -16,7 +18,8 @@ import {
   submitOrderRating,
   updateDeliveryStatus,
   updateDriverLocationForDelivery,
-  updateOrderStatus
+  updateOrderStatus,
+  estimateCancelAfterPickup,
 } from './order.controller';
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
@@ -166,6 +169,7 @@ router.post('/:orderId/rating', authenticate, submitOrderRating);
  *         description: Commande archivée
  */
 router.patch('/:orderId/archive', authenticate, authorize(PRIVILEGED_ROLES), archiveOrder);
+router.post('/:orderId/admin-cancel', authenticate, authorize(PRIVILEGED_ROLES), adminCancelDelivery);
 
 /**
  * @swagger
@@ -343,6 +347,8 @@ router.post('/deliveries/:orderId/cancel', cancelDelivery);
  *         description: Estimation des frais
  */
 router.get('/deliveries/:orderId/cancellation-estimate', estimateCancellation);
+router.get('/deliveries/:orderId/cancel-after-pickup-quote', estimateCancelAfterPickup);
+router.post('/deliveries/:orderId/cancel-after-pickup-confirm', confirmCancelAfterPickupFlow);
 
 /**
  * @swagger

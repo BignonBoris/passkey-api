@@ -5,7 +5,10 @@ import swaggerUi from "swagger-ui-express";
 import { Server } from "socket.io";
 import http from "http";
 import path from "path";
+import { Op } from "sequelize";
 import User from "./models/user.model";
+import Order from "./models/order.model";
+import Payment from "./models/payment.model";
 
 import routes from "./routes";
 import { swaggerSpec } from "./docs/swagger";
@@ -16,6 +19,7 @@ import {
 import { setSocketServer } from "./realtime/socket.instance";
 import { handleFedaPayWebhook, handleStripeWebhook } from "./modules/payments/payments.controller";
 import { resolveCountryFromCoordinates } from "./services/country.service";
+import { markOrderSearchDriverDeclined } from "./services/order-search-stats.service";
 
 const app = express();
 
@@ -135,12 +139,21 @@ io.on("connection", (socket) => {
     const driverId = String(payload?.driverId || "").trim();
     const decision = String(payload?.decision || "").trim().toLowerCase();
     if (!callerId || !driverId || !decision) return;
+    const orderId = String(payload?.orderId || "").trim();
+
+    if (decision === "declined" && orderId) {
+      markOrderSearchDriverDeclined(orderId, {
+        id: driverId,
+        name: String(payload?.driverName || "").trim(),
+        phone: String(payload?.driverPhone || "").trim(),
+      }).catch(console.error);
+    }
 
     io.to(`user_${callerId}`).emit("driver:call_status", {
       status: decision,
       driverId,
       callerId,
-      orderId: String(payload?.orderId || ""),
+      orderId,
       requestId: String(payload?.requestId || payload?.orderId || ""),
       createdAt: payload?.createdAt || new Date().toISOString(),
     });
@@ -177,6 +190,69 @@ io.on("connection", (socket) => {
     });
   });
 });
+
+setInterval(async () => {
+  try {
+    const expiredOrders = await Order.findAll({
+      where: {
+        status: "ACCEPTED",
+        paymentPromptDeadlineAt: { [Op.lte]: new Date() },
+        paymentCheckoutStartedAt: null,
+      },
+    });
+
+    for (const order of expiredOrders) {
+      const orderId = String(order.get("id") || "").trim();
+      const payment = await Payment.findOne({
+        where: { orderId },
+        order: [["createdAt", "DESC"]],
+      });
+      const paymentMethod = String(payment?.get("method") || "CASH").trim().toUpperCase();
+      const paymentStatus = String(payment?.get("status") || "PENDING").trim().toUpperCase();
+      if (!["MOBILE_MONEY", "CARD"].includes(paymentMethod) || paymentStatus === "PAID") {
+        continue;
+      }
+
+      await order.update({
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        cancelledBy: "SYSTEM",
+        cancellationReason: "Paiement non lance avant expiration du delai.",
+        paymentPromptDeadlineAt: null,
+      });
+
+      const driverId = String(order.get("driverId") || "").trim();
+      if (driverId) {
+        await User.update({ isAvailable: true }, { where: { id: driverId } });
+      }
+
+      const payload = {
+        orderId,
+        status: "CANCELLED",
+        cancelledBy: "SYSTEM",
+        cancellationReason: "Le delai de paiement a expire avant l'ouverture du paiement.",
+        payment_method: paymentMethod,
+        payment_status: paymentStatus,
+        paymentPromptDeadlineAt: null,
+        paymentCheckoutStartedAt: null,
+      };
+
+      io.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);
+      if (driverId) {
+        io.to(`user_${driverId}`).emit("order_status_changed", payload);
+      }
+      io.to("rides").emit("ride:updated", {
+        id: orderId,
+        orderId,
+        status: "CANCELLED",
+        driverId,
+        cancellationReason: payload.cancellationReason,
+      });
+    }
+  } catch (error) {
+    console.warn("payment prompt expiry watcher skipped:", error);
+  }
+}, 15000);
 
 app.use((req, _res, next) => {
   (req as any).io = io;

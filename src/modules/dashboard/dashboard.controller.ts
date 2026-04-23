@@ -20,6 +20,7 @@ import ServiceZone from "../../models/service-zone.model";
 const TREND_WINDOW_DAYS = 7;
 
 const formatDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const formatMonthKey = (date: Date) => date.toISOString().slice(0, 7);
 
 const buildDateRange = (start: Date, days = TREND_WINDOW_DAYS) => {
   const range: string[] = [];
@@ -27,6 +28,15 @@ const buildDateRange = (start: Date, days = TREND_WINDOW_DAYS) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
     range.push(formatDateKey(day));
+  }
+  return range;
+};
+
+const buildMonthRange = (year: number) => {
+  const range: string[] = [];
+  for (let m = 0; m < 12; m++) {
+    const date = new Date(year, m, 1);
+    range.push(formatMonthKey(date));
   }
   return range;
 };
@@ -130,6 +140,20 @@ export const getDashboardOverview = async (_req: Request, res: Response) => {
     const payoutsPendingCount = await Payout.count({ where: { status: "PENDING" } });
     const payoutsPendingAmount = (await Payout.sum("amount", {
       where: { status: "PENDING" },
+    })) as number | null;
+    
+    // Financial stats
+    const commissionsToday = (await Order.sum("platformCommission", {
+      where: {
+        status: "COMPLETED",
+        updatedAt: { [Op.gte]: startOfToday, [Op.lt]: startOfTomorrow },
+      },
+    })) as number | null;
+    const serviceFeesToday = (await Order.sum("serviceFee", {
+      where: {
+        status: "COMPLETED",
+        updatedAt: { [Op.gte]: startOfToday, [Op.lt]: startOfTomorrow },
+      },
     })) as number | null;
 
     const refundPendingCount = await RefundRequest.count({ where: { status: "PENDING" } });
@@ -238,6 +262,8 @@ export const getDashboardOverview = async (_req: Request, res: Response) => {
         incidentsHigh,
         zonesActive,
         zonesInactive,
+        commissionsToday: commissionsToday || 0,
+        platformRevenueToday: (commissionsToday || 0) + (serviceFeesToday || 0),
       },
     });
   } catch (error: any) {
@@ -250,15 +276,40 @@ export const getDashboardOverview = async (_req: Request, res: Response) => {
   }
 };
 
-export const getDashboardTrends = async (_req: Request, res: Response) => {
+export const getDashboardTrends = async (req: Request, res: Response) => {
   try {
+    const rangeParam = (req.query.range as string) || "7days";
     const now = new Date();
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
-    const rangeStart = new Date(startOfToday);
-    rangeStart.setDate(rangeStart.getDate() - (TREND_WINDOW_DAYS - 1));
 
-    const dateRange = buildDateRange(rangeStart, TREND_WINDOW_DAYS);
+    let rangeStart: Date;
+    let windowSize: number;
+    let isMonthly = false;
+    let formatFn: (d: Date) => string;
+    let buildRangeFn: (s: Date, w?: number) => string[];
+
+    if (rangeParam === "year") {
+      isMonthly = true;
+      rangeStart = new Date(now.getFullYear(), 0, 1);
+      windowSize = 12;
+      formatFn = formatMonthKey;
+      buildRangeFn = (_s) => buildMonthRange(now.getFullYear());
+    } else {
+      const days = rangeParam === "30days" ? 30 : 7;
+      rangeStart = new Date(startOfToday);
+      rangeStart.setDate(rangeStart.getDate() - (days - 1));
+      windowSize = days;
+      formatFn = formatDateKey;
+      buildRangeFn = (s, w) => buildDateRange(s, w);
+    }
+
+    const dateRange = buildRangeFn(rangeStart, windowSize);
+
+    const getGroupFn = (col: string) =>
+      isMonthly
+        ? sequelize.fn("DATE_FORMAT", sequelize.col(col), "%Y-%m")
+        : sequelize.fn("DATE", sequelize.col(col));
 
     const [
       newUsersRows,
@@ -266,103 +317,165 @@ export const getDashboardTrends = async (_req: Request, res: Response) => {
       ordersCreatedRows,
       ordersCompletedRows,
       revenueRows,
+      financialRows,
     ] = await Promise.all([
       User.findAll({
         attributes: [
-          [sequelize.fn("DATE", sequelize.col("createdAt")), "date"],
+          [getGroupFn("createdAt"), "date"],
           [sequelize.fn("COUNT", sequelize.col("id")), "value"],
         ],
-        where: {
-          role: "usager",
-          createdAt: { [Op.gte]: rangeStart },
-        },
-        group: [sequelize.fn("DATE", sequelize.col("createdAt"))],
-        order: [[sequelize.fn("DATE", sequelize.col("createdAt")), "ASC"]],
+        where: { role: "usager", createdAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("createdAt")],
         raw: true,
       }),
       User.findAll({
         attributes: [
-          [sequelize.fn("DATE", sequelize.col("createdAt")), "date"],
+          [getGroupFn("createdAt"), "date"],
           [sequelize.fn("COUNT", sequelize.col("id")), "value"],
         ],
-        where: {
-          role: "livreur",
-          createdAt: { [Op.gte]: rangeStart },
-        },
-        group: [sequelize.fn("DATE", sequelize.col("createdAt"))],
-        order: [[sequelize.fn("DATE", sequelize.col("createdAt")), "ASC"]],
+        where: { role: "livreur", createdAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("createdAt")],
         raw: true,
       }),
       Order.findAll({
         attributes: [
-          [sequelize.fn("DATE", sequelize.col("createdAt")), "date"],
+          [getGroupFn("createdAt"), "date"],
           [sequelize.fn("COUNT", sequelize.col("id")), "value"],
         ],
-        where: {
-          createdAt: { [Op.gte]: rangeStart },
-        },
-        group: [sequelize.fn("DATE", sequelize.col("createdAt"))],
-        order: [[sequelize.fn("DATE", sequelize.col("createdAt")), "ASC"]],
+        where: { createdAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("createdAt")],
         raw: true,
       }),
       Order.findAll({
         attributes: [
-          [sequelize.fn("DATE", sequelize.col("updatedAt")), "date"],
+          [getGroupFn("updatedAt"), "date"],
           [sequelize.fn("COUNT", sequelize.col("id")), "value"],
         ],
-        where: {
-          status: "COMPLETED",
-          updatedAt: { [Op.gte]: rangeStart },
-        },
-        group: [sequelize.fn("DATE", sequelize.col("updatedAt"))],
-        order: [[sequelize.fn("DATE", sequelize.col("updatedAt")), "ASC"]],
+        where: { status: "COMPLETED", updatedAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("updatedAt")],
         raw: true,
       }),
       Payment.findAll({
         attributes: [
-          [sequelize.fn("DATE", sequelize.col("paidAt")), "date"],
+          [getGroupFn("paidAt"), "date"],
           [sequelize.fn("SUM", sequelize.col("amount")), "value"],
         ],
-        where: {
-          status: "PAID",
-          paidAt: { [Op.gte]: rangeStart },
-        },
-        group: [sequelize.fn("DATE", sequelize.col("paidAt"))],
-        order: [[sequelize.fn("DATE", sequelize.col("paidAt")), "ASC"]],
+        where: { status: "PAID", paidAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("paidAt")],
+        raw: true,
+      }),
+      Order.findAll({
+        attributes: [
+          [getGroupFn("updatedAt"), "date"],
+          [sequelize.fn("SUM", sequelize.col("platformCommission")), "commission"],
+          [
+            sequelize.fn("SUM", sequelize.literal("platformCommission + serviceFee")),
+            "revenue",
+          ],
+        ],
+        where: { status: "COMPLETED", updatedAt: { [Op.gte]: rangeStart } },
+        group: [getGroupFn("updatedAt")],
         raw: true,
       }),
     ]);
 
-    const castEntries = <T extends { date: string; value: number | string | null }>(rows: unknown): T[] =>
-      (rows as T[]) ?? [];
+    const castEntries = <T extends { date: string; value: number | string | null }>(
+      rows: unknown
+    ): T[] => (rows as T[]) ?? [];
 
-    const newUsersMap = rowsToMap(castEntries(newUsersRows));
-    const newDriversMap = rowsToMap(castEntries(newDriversRows));
-    const ordersCreatedMap = rowsToMap(castEntries(ordersCreatedRows));
-    const ordersCompletedMap = rowsToMap(castEntries(ordersCompletedRows));
-    const revenueMap = rowsToMap(castEntries(revenueRows));
+    const nUMap = rowsToMap(castEntries(newUsersRows));
+    const nDMap = rowsToMap(castEntries(newDriversRows));
+    const oCMap = rowsToMap(castEntries(ordersCreatedRows));
+    const oCompMap = rowsToMap(castEntries(ordersCompletedRows));
+    const revMap = rowsToMap(castEntries(revenueRows));
+
+    const finMap = (castEntries(financialRows) as any[]).reduce((acc, row) => {
+      acc.set(row.date, {
+        commission: Number(row.commission || 0),
+        revenue: Number(row.revenue || 0),
+      });
+      return acc;
+    }, new Map<string, { commission: number; revenue: number }>());
 
     const daily = dateRange.map((date) => ({
       date,
-      newUsers: newUsersMap.get(date) ?? 0,
-      newDrivers: newDriversMap.get(date) ?? 0,
-      ordersCreated: ordersCreatedMap.get(date) ?? 0,
-      ordersCompleted: ordersCompletedMap.get(date) ?? 0,
-      payments: revenueMap.get(date) ?? 0,
+      newUsers: nUMap.get(date) ?? 0,
+      newDrivers: nDMap.get(date) ?? 0,
+      ordersCreated: oCMap.get(date) ?? 0,
+      ordersCompleted: oCompMap.get(date) ?? 0,
+      payments: revMap.get(date) ?? 0,
+      commission: finMap.get(date)?.commission ?? 0,
+      platformRevenue: finMap.get(date)?.revenue ?? 0,
     }));
 
     return res.status(200).json({
       success: true,
       message: "Dashboard trends loaded",
-      data: {
-        daily,
-      },
+      data: { daily, isMonthly },
     });
   } catch (error: any) {
     return res.status(500).json({
       success: false,
       message: "Failed to load dashboard trends",
-      data: { daily: [] },
+      data: { daily: [], isMonthly: false },
+      error: error?.message,
+    });
+  }
+};
+
+export const getDriversCommissions = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const whereClause: any = { status: "COMPLETED" };
+
+    if (startDate && endDate) {
+      whereClause.updatedAt = {
+        [Op.gte]: new Date(startDate as string),
+        [Op.lte]: new Date(endDate as string),
+      };
+    } else {
+      // Default to last 30 days if no range is provided
+      const now = new Date();
+      const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      whereClause.updatedAt = { [Op.gte]: lastMonth };
+    }
+
+    const commissions = await Order.findAll({
+      attributes: [
+        "driverId",
+        [sequelize.fn("COUNT", sequelize.col("Order.id")), "orderCount"],
+        [sequelize.fn("SUM", sequelize.col("price")), "totalVolume"],
+        [sequelize.fn("SUM", sequelize.col("platformCommission")), "totalCommission"],
+        [sequelize.fn("SUM", sequelize.col("serviceFee")), "totalServiceFee"],
+      ],
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: "driver",
+          attributes: ["id", "name", "phone", "email", "avatarUrl"],
+        },
+      ],
+      group: ["driverId", "driver.id"],
+      order: [[sequelize.literal("totalCommission"), "DESC"]],
+      raw: true,
+      nest: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: commissions.map((c: any) => ({
+        ...c,
+        totalVolume: Number(c.totalVolume || 0),
+        totalCommission: Number(c.totalCommission || 0),
+        totalServiceFee: Number(c.totalServiceFee || 0),
+        orderCount: Number(c.orderCount || 0),
+      })),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to load drivers commissions",
       error: error?.message,
     });
   }

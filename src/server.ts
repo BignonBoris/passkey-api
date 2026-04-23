@@ -69,9 +69,12 @@ async function startServer() {
     await ensureDefaultCountries();
     await ensureOrderArchiveColumn();
     await ensureOrderOtpColumns();
+    await ensureOrderPaymentPromptColumns();
     await ensureOrderRevenueColumns();
     await ensureOrderPricingColumns();
+    await ensureReturnOrderColumns();
     await ensureOrderRatingColumns();
+    await ensureOrderSearchStatsColumns();
     await ensureFoodOrderColumns();
     await ensurePricingRulesTable();
     await ensurePaymentSchema();
@@ -145,6 +148,52 @@ async function ensurePaymentSchema() {
     { name: "revenueAppliedAt", definition: { type: DataTypes.DATE, allowNull: true } },
     { name: "appliedDriverRevenue", definition: { type: DataTypes.FLOAT, allowNull: true } },
     { name: "appliedPlatformShare", definition: { type: DataTypes.FLOAT, allowNull: true } },
+  ];
+
+  for (const column of optionalColumns) {
+    if (!columns[column.name]) {
+      await queryInterface.addColumn(tableName, column.name, column.definition);
+    }
+  }
+}
+
+async function ensureOrderSearchStatsColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Order";
+  const columns = await queryInterface.describeTable(tableName);
+
+  const optionalColumns: Array<{ name: string; definition: any }> = [
+    {
+      name: "searchFailureCount",
+      definition: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    },
+    {
+      name: "driverSearchStatsJson",
+      definition: { type: DataTypes.TEXT("long"), allowNull: true },
+    },
+  ];
+
+  for (const column of optionalColumns) {
+    if (!columns[column.name]) {
+      await queryInterface.addColumn(tableName, column.name, column.definition);
+    }
+  }
+}
+
+async function ensureOrderPaymentPromptColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Order";
+  const columns = await queryInterface.describeTable(tableName);
+
+  const optionalColumns: Array<{ name: string; definition: any }> = [
+    {
+      name: "paymentPromptDeadlineAt",
+      definition: { type: DataTypes.DATE, allowNull: true },
+    },
+    {
+      name: "paymentCheckoutStartedAt",
+      definition: { type: DataTypes.DATE, allowNull: true },
+    },
   ];
 
   for (const column of optionalColumns) {
@@ -240,6 +289,8 @@ async function ensureUserPhoneNullable() {
 
 async function ensureCountrySchema() {
   const queryInterface = sequelize.getQueryInterface();
+  const dialect = sequelize.getDialect();
+  const q = dialect === 'postgres' ? '"' : '`';
   const tablesRaw = await queryInterface.showAllTables();
   const tables = tablesRaw.map((table: any) => (typeof table === "string" ? table : String(Object.values(table)[0] || "")));
 
@@ -353,7 +404,7 @@ async function ensureCountrySchema() {
     }
 
     await sequelize.query(
-      `UPDATE \`${table.tableName}\` SET \`${table.column}\` = :countryId WHERE \`${table.column}\` IS NULL OR \`${table.column}\` = ''`,
+      `UPDATE ${q}${table.tableName}${q} SET ${q}${table.column}${q} = :countryId WHERE ${q}${table.column}${q} IS NULL OR ${q}${table.column}${q} = ''`,
       {
         replacements: { countryId: BENIN_COUNTRY_ID },
       }
@@ -428,16 +479,31 @@ async function ensureRiderColumnsExist() {
 }
 
 async function cleanupVehiclePricingConstraints() {
+  const dialect = sequelize.getDialect();
+
   const queryInterface = sequelize.getQueryInterface();
   try {
     // Puisque la table est vide (recherche précedente), on la drop pour laisser sync() la recréer proprement.
     // Cela résoud l'erreur ER_CANT_DROP_FIELD_OR_KEY sur les FK/index mal nommés.
-    const [countRes] = await sequelize.query("SELECT COUNT(*) as count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'VehiclePricingConfig'");
-    if (Array.isArray(countRes) && countRes.length > 0 && (countRes[0] as any).count > 0) {
+    let countResRaw: any[];
+    if (sequelize.getDialect() === 'postgres') {
+      [countResRaw] = await sequelize.query(
+        "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'VehiclePricingConfig'"
+      );
+    } else {
+      [countResRaw] = await sequelize.query(
+        "SELECT COUNT(*) as count FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'VehiclePricingConfig'"
+      );
+    }
+    if (Array.isArray(countResRaw) && countResRaw.length > 0 && (countResRaw[0] as any).count > 0) {
       // On ne drop que si on est sur que c'est safe ou si on force.
-      // Ici on tente un drop direct car on a vu que count=0.
-      await sequelize.query("DROP TABLE IF EXISTS \`VehiclePricingConfig\`");
-      await sequelize.query("DROP TABLE IF EXISTS \`DriverRevenueConfig\`");
+      if (sequelize.getDialect() === 'postgres') {
+        await sequelize.query('DROP TABLE IF EXISTS "VehiclePricingConfig" CASCADE');
+        await sequelize.query('DROP TABLE IF EXISTS "DriverRevenueConfig" CASCADE');
+      } else {
+        await sequelize.query('DROP TABLE IF EXISTS `VehiclePricingConfig`');
+        await sequelize.query('DROP TABLE IF EXISTS `DriverRevenueConfig`');
+      }
       console.log("[migration] Tables VehiclePricingConfig et DriverRevenueConfig supprimées pour reconstruction.");
     }
   } catch (err) {
@@ -958,10 +1024,49 @@ async function ensureOrderPricingColumns() {
     type: DataTypes.STRING,
     allowNull: true,
   });
+  await addColumn("cancellationReason", {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  });
   await addColumn("cancellationFee", {
     type: DataTypes.FLOAT,
     allowNull: false,
     defaultValue: 0,
+  });
+}
+
+async function ensureReturnOrderColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Order";
+  const columns = await queryInterface.describeTable(tableName);
+
+  const addColumn = (name: string, definition: any) => {
+    if (!columns[name]) {
+      return queryInterface.addColumn(tableName, name, definition);
+    }
+    return Promise.resolve();
+  };
+
+  await addColumn("parentOrderId", {
+    type: DataTypes.UUID,
+    allowNull: true,
+  });
+  await addColumn("returnOrderId", {
+    type: DataTypes.UUID,
+    allowNull: true,
+  });
+  await addColumn("flowType", {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: "STANDARD",
+  });
+  await addColumn("returnContextJson", {
+    type: DataTypes.TEXT("long"),
+    allowNull: true,
+  });
+  await addColumn("cancelledAfterPickupAt", {
+    type: DataTypes.DATE,
+    allowNull: true,
   });
 }
 

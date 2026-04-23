@@ -1,5 +1,5 @@
 import express from "express";
-import { getDashboardOverview, getDashboardTrends } from "./dashboard.controller";
+import { getDashboardOverview, getDashboardTrends, getDriversCommissions } from "./dashboard.controller";
 
 const router = express.Router();
 

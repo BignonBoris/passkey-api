@@ -18,7 +18,19 @@ import { calculateCancellationFees } from "../../services/cancellation.service";
 import { resolveCountryId } from "../../services/country.service";
 import AppSettings from '../../models/app-settings.model';
 import sequelize from '../../config/database';
+import Country from "../../models/country.model";
 import { AuthenticatedRequest } from '../../types/auth-request';
+import { getRouteDetails } from '../maps/maps.service';
+import {
+  beginOrderSearchAttempt,
+  markOrderSearchAccepted,
+  markOrderSearchFailed,
+  SearchDriverSnapshot,
+} from '../../services/order-search-stats.service';
+import {
+  confirmCancelAfterPickup,
+  getCancelAfterPickupQuote,
+} from "../../services/return-order.service";
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -40,6 +52,33 @@ const CANCELLATION_BLOCKING_STATUSES = [
   "COMPLETED",
 ] as const;
 
+const DELIVERY_TRACKING_STATUSES = [
+  "DRIVER_LEFT_PICKUP",
+  "PICKED_UP",
+  "IN_TRANSIT",
+] as const;
+
+const ETA_CACHE_TTL_MS = 8000;
+const PAYMENT_PROMPT_WINDOW_MS = 3 * 60 * 1000;
+
+type DeliveryEtaPayload = {
+  remainingSeconds: number;
+  remainingText: string;
+  distanceMeters: number;
+  distanceText: string;
+  target: "DESTINATION";
+  computedAt: string;
+};
+
+type DeliveryEtaCacheEntry = {
+  computedAtMs: number;
+  originKey: string;
+  destinationKey: string;
+  payload: DeliveryEtaPayload | null;
+};
+
+const deliveryEtaCache = new Map<string, DeliveryEtaCacheEntry>();
+
 function generateCompletionOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -59,6 +98,12 @@ function normalizeDeliveryStatus(value: unknown): string {
   return normalized;
 }
 
+function isDeliveryTrackingStatus(value: unknown): boolean {
+  return DELIVERY_TRACKING_STATUSES.includes(
+    normalizeDeliveryStatus(value) as (typeof DELIVERY_TRACKING_STATUSES)[number]
+  );
+}
+
 async function getOrderPaymentSnapshot(orderId: string) {
   const payment = await resolveOrderDisplayPayment(orderId);
 
@@ -66,6 +111,70 @@ async function getOrderPaymentSnapshot(orderId: string) {
     payment,
     paymentMethod: String(payment?.get("method") || "CASH"),
     paymentStatus: String(payment?.get("status") || "PENDING"),
+  };
+}
+
+function buildPaymentPromptPayload(order: Order | Record<string, unknown>) {
+  const read = (key: string) =>
+    order instanceof Order ? order.get(key) : (order as Record<string, unknown>)[key];
+
+  return {
+    paymentPromptDeadlineAt: read("paymentPromptDeadlineAt") || null,
+    paymentCheckoutStartedAt: read("paymentCheckoutStartedAt") || null,
+  };
+}
+
+async function buildTrackingDataForOrder(orderId: string) {
+  const order = await Order.findByPk(orderId, { raw: true });
+  if (!order) return null;
+
+  let driver: Record<string, unknown> | null = null;
+  let vehicle: Record<string, unknown> | null = null;
+
+  if (order.driverId) {
+    const vehicleWhere: Record<string, unknown> = { driverId: order.driverId };
+    if (order.driverVehicleId) {
+      vehicleWhere.id = order.driverVehicleId;
+    }
+
+    const [driverResult, vehicleResult] = await Promise.all([
+      User.findByPk(order.driverId, { raw: true }),
+      DriverVehicle.findOne({
+        where: vehicleWhere,
+        order: [["createdAt", "DESC"]],
+        raw: true,
+      }),
+    ]);
+
+    driver = driverResult ? (driverResult as unknown as Record<string, unknown>) : null;
+    vehicle = vehicleResult ? (vehicleResult as unknown as Record<string, unknown>) : null;
+  }
+
+  const { paymentMethod, paymentStatus } = await getOrderPaymentSnapshot(orderId);
+  const rawOrderPayload = order as unknown as Record<string, unknown>;
+  const orderPayload = {
+    ...rawOrderPayload,
+    payment_method: paymentMethod,
+    payment_status: paymentStatus,
+    ...buildPaymentPromptPayload(rawOrderPayload),
+  };
+  const latitude = parseNumber(driver?.latitude ?? rawOrderPayload["driverLatitude"]);
+  const longitude = parseNumber(driver?.longitude ?? rawOrderPayload["driverLongitude"]);
+  const eta =
+    latitude != null && longitude != null
+      ? await buildDeliveryEtaPayload({
+          orderId,
+          order,
+          latitude,
+          longitude,
+        })
+      : null;
+
+  return {
+    order: orderPayload,
+    driver,
+    vehicle,
+    eta,
   };
 }
 
@@ -105,6 +214,118 @@ async function notifyUserDeliveryStep(
   });
 }
 
+async function notifyDriverDeliveryStep(
+  driverId: string,
+  params: { title: string; body: string; type: string; route?: string; orderId?: string },
+) {
+  const driver = await User.findByPk(driverId);
+  const driverToken = String(driver?.get("fcmToken") || "").trim();
+  if (!driverToken) return;
+
+  await sendNotificationToDriver(driverToken, params.title, params.body, {
+    type: params.type,
+    orderId: String(params.orderId || "").trim(),
+    status: "CANCELLED",
+    route: params.route || "/delivery",
+  });
+}
+
+function normalizeCancellationActor(value: unknown): "USER" | "DRIVER" | "ADMIN" | "SYSTEM" {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "ADMIN") return "ADMIN";
+  if (normalized === "DRIVER") return "DRIVER";
+  if (normalized === "SYSTEM") return "SYSTEM";
+  return "USER";
+}
+
+function buildCancellationStatusMessage(actor: "USER" | "DRIVER" | "ADMIN" | "SYSTEM"): string {
+  switch (actor) {
+    case "ADMIN":
+      return "Cette course a ete annulee par l'administration.";
+    case "DRIVER":
+      return "Le livreur a annule cette course.";
+    case "SYSTEM":
+      return "Cette course a ete annulee par le systeme.";
+    default:
+      return "Cette course a ete annulee par l'usager.";
+  }
+}
+
+async function cancelOrderAndBroadcast(params: {
+  order: Order;
+  io: Server;
+  cancelledBy: "USER" | "DRIVER" | "ADMIN" | "SYSTEM";
+  cancellationReason?: string;
+  waiveFees?: boolean;
+}) {
+  const { order, io, cancelledBy, waiveFees = false } = params;
+  const reason = String(params.cancellationReason || "").trim();
+  const orderId = String(order.get("id") || "").trim();
+  const driverId = String(order.get("driverId") || "").trim();
+  const userId = String(order.get("userId") || "").trim();
+
+  const updatePayload: Record<string, unknown> = {
+    status: "CANCELLED",
+    cancelledAt: new Date(),
+    cancelledBy,
+    cancellationReason: reason || null,
+  };
+  if (waiveFees) {
+    updatePayload.cancellationFee = 0;
+  }
+
+  await order.update(updatePayload);
+
+  if (driverId) {
+    await User.update({ isAvailable: true }, { where: { id: driverId } });
+  }
+
+  const payload = {
+    orderId,
+    status: "CANCELLED",
+    driverId,
+    cancelledBy,
+    cancellationReason: reason,
+    cancellationFee: waiveFees ? 0 : Number(order.get("cancellationFee") || 0),
+  };
+
+  io.to(`user_${userId}`).emit("order_status_changed", payload);
+  io.to("rides").emit("ride:updated", {
+    id: orderId,
+    orderId,
+    status: "CANCELLED",
+    driverId,
+    cancellationReason: reason,
+  });
+  io.to("drivers").emit("CANCEL_INCOMING_CALL", {
+    orderId,
+    requestId: orderId,
+    cancelledBy,
+    cancellationReason: reason,
+  });
+  if (driverId) {
+    io.to(`user_${driverId}`).emit("order_status_changed", payload);
+  }
+
+  const cancellationMessage = buildCancellationStatusMessage(cancelledBy);
+  const reasonSuffix = reason ? ` Motif: ${reason}` : "";
+  await notifyUserDeliveryStep(order, {
+    title: "Course annulee",
+    body: `${cancellationMessage}${reasonSuffix}`.trim(),
+    type: "ORDER_CANCELLED",
+    route: "/app",
+  });
+  if (driverId) {
+    await notifyDriverDeliveryStep(driverId, {
+      title: "Course annulee",
+      body: `${cancellationMessage}${reasonSuffix}`.trim(),
+      type: "ORDER_CANCELLED",
+      route: "/delivery",
+      orderId,
+    });
+  }
+}
+
 function parseLatLng(raw?: string): { lat: number; lng: number } | null {
   if (!raw) return null;
   const [latText, lngText] = raw.split(",").map((v) => v.trim());
@@ -117,6 +338,70 @@ function parseLatLng(raw?: string): { lat: number; lng: number } | null {
 function parseNumber(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toLatLngString(lat: number, lng: number): string {
+  return `${lat.toFixed(6)},${lng.toFixed(6)}`;
+}
+
+async function buildDeliveryEtaPayload(params: {
+  orderId: string;
+  order: Record<string, any>;
+  latitude: number;
+  longitude: number;
+}): Promise<DeliveryEtaPayload | null> {
+  const { orderId, order, latitude, longitude } = params;
+
+  if (!isDeliveryTrackingStatus(order.status)) {
+    deliveryEtaCache.delete(orderId);
+    return null;
+  }
+
+  const destinationRaw = String(order.destinationLocation || "").trim();
+  const destination = parseLatLng(destinationRaw);
+  if (!destination) {
+    deliveryEtaCache.delete(orderId);
+    return null;
+  }
+
+  const originKey = toLatLngString(latitude, longitude);
+  const destinationKey = destinationRaw;
+  const now = Date.now();
+  const cached = deliveryEtaCache.get(orderId);
+
+  if (
+    cached &&
+    cached.originKey == originKey &&
+    cached.destinationKey == destinationKey &&
+    now - cached.computedAtMs < ETA_CACHE_TTL_MS
+  ) {
+    return cached.payload;
+  }
+
+  const route = await getRouteDetails(
+    `${latitude},${longitude}`,
+    `${destination.lat},${destination.lng}`
+  );
+
+  const payload = route
+    ? {
+        remainingSeconds: Math.max(0, Number(route.durationValue) || 0),
+        remainingText: String(route.durationText || "").trim(),
+        distanceMeters: Math.max(0, Number(route.distanceValue) || 0),
+        distanceText: String(route.distanceText || "").trim(),
+        target: "DESTINATION" as const,
+        computedAt: new Date().toISOString(),
+      }
+    : null;
+
+  deliveryEtaCache.set(orderId, {
+    computedAtMs: now,
+    originKey,
+    destinationKey,
+    payload,
+  });
+
+  return payload;
 }
 
 function extractDistanceKm(distanceValue: unknown): number {
@@ -320,6 +605,13 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
 
   console.log(`[RÉSULTAT] ${nearbyDrivers.length} livreurs vont recevoir l'appel de course.\n`);
 
+  const driverSnapshots: SearchDriverSnapshot[] = nearbyDrivers.map((driver) => ({
+    id: String(driver.get('id') || '').trim(),
+    name: String(driver.get('name') || 'Livreur').trim(),
+    phone: String(driver.get('phone') || '').trim(),
+  }));
+  await beginOrderSearchAttempt(String(order.get('id') || ''), driverSnapshots);
+
   const deliveryRequestPayload = await buildDriverDeliveryRequestPayload(order, paymentRow);
 
   const pushPromises = nearbyDrivers.map(d => {
@@ -418,27 +710,208 @@ export const cancelDelivery = async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const order = await Order.findByPk(orderId);
     if (!order || order.get('status') === "COMPLETED") return res.status(400).json({ success: false });
-    await order.update({ status: "CANCELLED", cancelledAt: new Date() });
-    const driverId = order.get('driverId');
-    if (driverId) await User.update({ isAvailable: true }, { where: { id: driverId } });
     const io: Server = (req as any).io;
-    const payload = {
-      orderId,
-      status: "CANCELLED",
-      driverId: String(driverId || ""),
-      cancelledBy: "USER",
-    };
-    io.to(`user_${order.get('userId')}`).emit("order_status_changed", payload);
-    io.to('drivers').emit('CANCEL_INCOMING_CALL', {
-      orderId,
-      requestId: orderId,
-      cancelledBy: "USER",
+    await cancelOrderAndBroadcast({
+      order,
+      io,
+      cancelledBy: normalizeCancellationActor(req.body?.cancelledBy),
+      cancellationReason: req.body?.cancellationReason,
     });
+    return res.status(200).json({ success: true });
+  } catch (error) { return res.status(500).json({ success: false }); }
+};
+
+export const estimateCancelAfterPickup = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const { order, quote } = await getCancelAfterPickupQuote(orderId);
+
+    if (quote.existingReturnOrderId) {
+      return res.status(409).json({
+        success: false,
+        message: "Une course retour existe deja pour cette course.",
+        data: {
+          existingReturnOrderId: quote.existingReturnOrderId,
+        },
+      });
+    }
+
+    const io: Server = (req as any).io;
+    const driverId = String(order.get("driverId") || "").trim();
+    const userId = String(order.get("userId") || "").trim();
+    if (driverId) {
+      const user = userId ? await User.findByPk(userId) : null;
+      io.to(`user_${driverId}`).emit("cancel_after_pickup_requested", {
+        orderId,
+        driverId,
+        userId,
+        userName: String(user?.get("name") || "L'usager").trim(),
+        message: "L'usager souhaite annuler la course en cours.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        currentDriverPosition: quote.currentDriverPosition,
+        returnPickupLocation: quote.returnPickupLocation,
+        returnPickupAddress: quote.returnPickupAddress,
+        returnDestinationLocation: quote.returnDestinationLocation,
+        returnDestinationAddress: quote.returnDestinationAddress,
+        distanceMeters: quote.distanceMeters,
+        distanceText: quote.distanceText,
+        durationSeconds: quote.durationSeconds,
+        durationText: quote.durationText,
+        initialOrderAmount: quote.initialOrderAmount,
+        initialUnpaidAmount: quote.initialUnpaidAmount,
+        returnAmount: quote.returnAmount,
+        totalAmountDue: quote.totalAmountDue,
+        paymentMethod: quote.paymentMethod,
+        originalPaymentStatus: quote.originalPaymentStatus,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Impossible de calculer la course retour.",
+    });
+  }
+};
+
+export const confirmCancelAfterPickupFlow = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const result = await confirmCancelAfterPickup({
+      orderId,
+      cancellationReason: req.body?.cancellationReason,
+    });
+
+    if (!result.returnOrder) {
+      return res.status(409).json({
+        success: false,
+        message: "Une course retour existe deja pour cette course.",
+      });
+    }
+
+    const originalOrderId = String(result.originalOrder.get("id") || "").trim();
+    const returnOrderId = String(result.returnOrder.get("id") || "").trim();
+    const returnTracking = await buildTrackingDataForOrder(returnOrderId);
+    const io: Server = (req as any).io;
+
+    const payload = {
+      orderId: originalOrderId,
+      status: "CANCELLED",
+      cancelledBy: "USER",
+      cancellationReason: String(req.body?.cancellationReason || "").trim(),
+      hasReturnOrder: true,
+      returnOrderId,
+      returnTracking,
+      totalAmountDue: Number(result.quote?.totalAmountDue || 0),
+      returnAmount: Number(result.quote?.returnAmount || 0),
+      initialUnpaidAmount: Number(result.quote?.initialUnpaidAmount || 0),
+    };
+
+    const userId = String(result.originalOrder.get("userId") || "").trim();
+    const driverId = String(result.originalOrder.get("driverId") || "").trim();
+
+    io.to(`user_${userId}`).emit("order_status_changed", payload);
     if (driverId) {
       io.to(`user_${driverId}`).emit("order_status_changed", payload);
     }
-    return res.status(200).json({ success: true });
-  } catch (error) { return res.status(500).json({ success: false }); }
+
+    io.to("rides").emit("ride:updated", {
+      id: originalOrderId,
+      orderId: originalOrderId,
+      status: "CANCELLED",
+      driverId,
+      hasReturnOrder: true,
+      returnOrderId,
+    });
+    io.to("rides").emit("ride:created", result.returnOrder);
+
+    await notifyUserDeliveryStep(result.returnOrder, {
+      title: "Retour du colis en cours",
+      body: "Votre course retour a ete creee automatiquement. Le livreur ramene le colis au point de recuperation.",
+      type: "RETURN_ORDER_CREATED",
+      route: "/maps",
+    });
+    if (driverId) {
+      await notifyDriverDeliveryStep(driverId, {
+        title: "Course retour",
+        body: "L'usager a annule apres demarrage. Ramenez le colis au point de recuperation initial.",
+        type: "RETURN_ORDER_CREATED",
+        route: "/delivery",
+        orderId: returnOrderId,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "La course retour a ete creee.",
+      data: {
+        originalOrderId,
+        returnOrderId,
+        tracking: returnTracking,
+        quote: result.quote
+          ? {
+              distanceText: result.quote.distanceText,
+              durationText: result.quote.durationText,
+              initialOrderAmount: result.quote.initialOrderAmount,
+              initialUnpaidAmount: result.quote.initialUnpaidAmount,
+              returnAmount: result.quote.returnAmount,
+              totalAmountDue: result.quote.totalAmountDue,
+              paymentMethod: result.quote.paymentMethod,
+            }
+          : null,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Impossible de creer la course retour.",
+    });
+  }
+};
+
+export const adminCancelDelivery = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Course introuvable" });
+    }
+    if (String(order.get("status") || "").trim().toUpperCase() === "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Une course terminee ne peut plus etre annulee",
+      });
+    }
+    if (String(order.get("status") || "").trim().toUpperCase() === "CANCELLED") {
+      return res.status(400).json({
+        success: false,
+        message: "Cette course est deja annulee",
+      });
+    }
+
+    const io: Server = (req as any).io;
+    await cancelOrderAndBroadcast({
+      order,
+      io,
+      cancelledBy: "ADMIN",
+      cancellationReason: req.body?.cancellationReason,
+      waiveFees: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "La course a ete annulee sans frais pour l'usager.",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible d'annuler cette course.",
+    });
+  }
 };
 
 export const getOrders = async (req: Request, res: Response) => {
@@ -455,12 +928,17 @@ export const getOrders = async (req: Request, res: Response) => {
       where.isArchived = false;
     }
 
-    const orders = await Order.findAll({ where, order: [["createdAt", "DESC"]] });
+    const orders = await Order.findAll({ 
+      where, 
+      order: [["createdAt", "DESC"]],
+      include: [{ model: Country, as: "country", attributes: ["name"] }]
+    });
 
     const enrichedOrders = await Promise.all(
-      orders.map(async (order) => {
+      orders.map(async (order: any) => {
         const rawOrder = order.toJSON() as Record<string, unknown>;
         const currentDriverId = String(rawOrder.driverId || "").trim();
+        const countryName = order.country?.name || String(rawOrder.countryName || "-");
 
         try {
           const [payment, driver] = await Promise.all([
@@ -474,6 +952,7 @@ export const getOrders = async (req: Request, res: Response) => {
 
           return {
             ...rawOrder,
+            countryName,
             paymentStatus: String(payment?.get("status") || rawOrder.paymentStatus || ""),
             payment_status: String(payment?.get("status") || rawOrder.payment_status || ""),
             paymentMethod: String(payment?.get("method") || rawOrder.paymentMethod || ""),
@@ -543,6 +1022,22 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const { driverId, completionOtp } = req.body;
     const status = normalizeDeliveryStatus(req.body?.status);
     const order = await Order.findByPk(orderId);
+    if (status === "IN_TRANSIT" && order) {
+      const { paymentMethod, paymentStatus } = await getOrderPaymentSnapshot(orderId);
+      const normalizedPaymentMethod = String(paymentMethod || "CASH")
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, "_");
+      const normalizedPaymentStatus = String(paymentStatus || "PENDING")
+        .trim()
+        .toUpperCase();
+      if (["MOBILE_MONEY", "CARD"].includes(normalizedPaymentMethod) && normalizedPaymentStatus !== "PAID") {
+        return res.status(400).json({
+          success: false,
+          message: "Le paiement doit etre confirme avant le demarrage de la course.",
+        });
+      }
+    }
     if (!order) return res.status(404).json({ message: "Commande non trouvée" });
     if (status === 'ACCEPTED' && order.get('status') !== 'PENDING') return res.status(400).json({ success: false, message: "Déjà acceptée par un autre livreur" });
     const previousStatus = String(order.get('status') || '').trim().toUpperCase();
@@ -564,6 +1059,10 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       const currentDriverId = order.get('driverId');
       if (currentDriverId) await User.update({ isAvailable: true }, { where: { id: currentDriverId } });
     }
+    if (status === "IN_TRANSIT") {
+      updateData.paymentPromptDeadlineAt = null;
+      updateData.paymentCheckoutStartedAt = null;
+    }
     await Order.update(updateData, { where: { id: orderId } });
     const refreshedOrder = await Order.findByPk(orderId);
     const orderForEvents = refreshedOrder ?? order;
@@ -576,6 +1075,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       payment_method: paymentMethod,
       payment_status: paymentStatus,
       searchStartedAt: orderForEvents.get('searchStartedAt'),
+      paymentPromptDeadlineAt: orderForEvents.get('paymentPromptDeadlineAt'),
+      paymentCheckoutStartedAt: orderForEvents.get('paymentCheckoutStartedAt'),
     };
     io.to(`user_${orderForEvents.get('userId')}`).emit('order_status_changed', payload);
     if (status === 'ACCEPTED') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
@@ -588,12 +1089,22 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       requestId: orderId,
       cancelledBy: 'SYSTEM_NO_DRIVER_FOUND',
     });
+    if (status === 'NO_DRIVER_FOUND') {
+      await markOrderSearchFailed(orderId);
+    }
     if (status === 'PENDING' && previousStatus === 'NO_DRIVER_FOUND') {
       const paymentRow = await Payment.findOne({
         where: { orderId },
         order: [["createdAt", "DESC"]],
       });
       notifyNearbyDrivers(orderForEvents, io, null, paymentRow).catch(console.error);
+    }
+    if (status === 'ACCEPTED') {
+      await markOrderSearchAccepted(orderId, {
+        id: String(driverId || orderForEvents.get('driverId') || '').trim(),
+        name: '',
+        phone: '',
+      });
     }
     if (status === "COMPLETED") await notifyUserDeliveryStep(orderForEvents, { title: "Livraison terminee", body: "Merci!", type: "ORDER_COMPLETED" });
     if (status === "ACCEPTED") {
@@ -867,10 +1378,29 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const { driverId } = req.body;
+    const paymentSnapshot = await getOrderPaymentSnapshot(orderId);
+    const paymentMethod = String(paymentSnapshot.paymentMethod || "CASH")
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, "_");
+    const paymentStatus = String(paymentSnapshot.paymentStatus || "PENDING")
+      .trim()
+      .toUpperCase();
+    const shouldAwaitRemotePayment =
+      ["MOBILE_MONEY", "CARD"].includes(paymentMethod) &&
+      paymentStatus !== "PAID";
+    const paymentPromptDeadlineAt = shouldAwaitRemotePayment
+      ? new Date(Date.now() + PAYMENT_PROMPT_WINDOW_MS)
+      : null;
 
     // Sécurisation : on met à jour SEULEMENT si la course est toujours en attente
     const [affectedCount] = await Order.update(
-      { driverId, status: "ACCEPTED" },
+      {
+        driverId,
+        status: "ACCEPTED",
+        paymentPromptDeadlineAt,
+        paymentCheckoutStartedAt: null,
+      },
       { where: { id: orderId, status: "PENDING" } }
     );
 
@@ -878,13 +1408,18 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Course déjà assignée ou annulée." });
     }
 
-    const order = await Order.findByPk(orderId);
-    if (!order) return res.status(404).json({ success: false });
+      const order = await Order.findByPk(orderId);
+      if (!order) return res.status(404).json({ success: false });
 
-    await User.update({ isAvailable: false }, { where: { id: driverId } });
-    const driver: any = await User.findByPk(driverId, { raw: true });
+      await User.update({ isAvailable: false }, { where: { id: driverId } });
+      const driver: any = await User.findByPk(driverId, { raw: true });
+      await markOrderSearchAccepted(orderId, {
+        id: String(driver?.id || driverId || '').trim(),
+        name: String(driver?.name || '').trim(),
+        phone: String(driver?.phone || '').trim(),
+      });
 
-    let vehicle = null;
+      let vehicle = null;
     try {
       vehicle = await DriverVehicle.findOne({ where: { driverId }, raw: true });
     } catch (e) { }
@@ -908,7 +1443,18 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       },
       vehicle: vehicle || {},
       completionOtp: order.get('completionOtp'),
-      payment_method: String((await getOrderPaymentSnapshot(orderId)).paymentMethod || "CASH"),
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      paymentPromptDeadlineAt,
+      paymentCheckoutStartedAt: null,
+    });
+    io.to(`user_${driverId}`).emit("order_status_changed", {
+      orderId,
+      status: "ACCEPTED",
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      paymentPromptDeadlineAt,
+      paymentCheckoutStartedAt: null,
     });
     io.to('drivers').emit('CANCEL_INCOMING_CALL', {
       orderId,
@@ -965,17 +1511,24 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       });
     }
 
-    const status = String(order.status || "").trim();
-    const payload = {
-      orderId,
-      driverId: normalizedDriverId,
-      userId: normalizedDriverId,
-      role: "livreur",
+      const status = String(order.status || "").trim();
+      const eta = await buildDeliveryEtaPayload({
+        orderId,
+        order,
+        latitude: lat,
+        longitude: lng,
+      });
+      const payload = {
+        orderId,
+        driverId: normalizedDriverId,
+        userId: normalizedDriverId,
+        role: "livreur",
       latitude: lat,
-      longitude: lng,
-      status,
-      locationUpdatedAt: new Date().toISOString(),
-    };
+        longitude: lng,
+        status,
+        locationUpdatedAt: new Date().toISOString(),
+        eta,
+      };
 
     const io: Server = (req as any).io;
     io.to(`order_${orderId}`).emit("order:driver_location_updated", payload);
@@ -989,37 +1542,22 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       payload,
     );
 
-    return res.status(200).json({ success: true });
-  } catch (error) {
-    return res.status(500).json({ success: false });
-  }
-};
+      return res.status(200).json({ success: true, data: { eta } });
+    } catch (error) {
+      return res.status(500).json({ success: false });
+    }
+  };
 
 export const getDeliveryTracking = async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-    const order = await Order.findByPk(orderId, { raw: true });
-    let driver = null;
-    let vehicle = null;
-    if (order?.driverId) {
-      const vehicleWhere: Record<string, unknown> = { driverId: order.driverId };
-      if (order.driverVehicleId) {
-        vehicleWhere.id = order.driverVehicleId;
+    try {
+      const { orderId } = req.params;
+      const trackingData = await buildTrackingDataForOrder(orderId);
+      if (!trackingData) {
+        return res.status(404).json({ success: false, message: "Course introuvable" });
       }
-      const [driverResult, vehicleResult] = await Promise.all([
-        User.findByPk(order.driverId, { raw: true }),
-        DriverVehicle.findOne({
-          where: vehicleWhere,
-          order: [["createdAt", "DESC"]],
-          raw: true,
-        }),
-      ]);
-      driver = driverResult;
-      vehicle = vehicleResult;
-    }
-    return res.status(200).json({ success: true, data: { order, driver, vehicle } });
-  } catch (error) { return res.status(500).json({ success: false }); }
-};
+      return res.status(200).json({ success: true, data: trackingData });
+    } catch (error) { return res.status(500).json({ success: false }); }
+  };
 
 export const estimateCancellation = async (req: Request, res: Response) => {
   try {

@@ -99,10 +99,11 @@ export const swaggerSpec = swaggerJSDoc({
         },
         VerifyOtpRequest: {
           type: "object",
-          required: ["phone", "otp"],
+          required: ["phone", "otp", "role"],
           properties: {
             phone: { type: "string", example: "+22961234567" },
             otp: { type: "string", example: "123456" },
+            role: { type: "string", enum: ["usager", "livreur", "admin", "sous-admin"], example: "usager" },
           },
         },
         AuthResponse: {

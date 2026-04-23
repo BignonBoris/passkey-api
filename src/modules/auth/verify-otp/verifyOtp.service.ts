@@ -8,9 +8,9 @@ export class VerifyOtpService {
   static async verifyOTP(phone: string, role: string, otp: string) {
 
     const normalizedPhone = await nomalizeCustomerPhone(phone);
-
+    console.log(normalizedPhone, role, otp);
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
-
+    console.log(user);
     if (!user) {
       return {
         success: false,

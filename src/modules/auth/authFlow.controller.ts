@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import axios from "axios";
 import {
   adminSignUpSchema,
   adminSignInSchema,
@@ -127,6 +128,37 @@ export const recoverPassword = catchAsync(
 
 export const adminSignIn = catchAsync(async (req: Request, res: Response) => {
   const body = adminSignInSchema.parse(req.body);
+
+  // Verification reCAPTCHA
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  if (secretKey) {
+    if (!body.captchaToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Vérification reCAPTCHA requise.",
+      });
+    }
+
+    try {
+      const verifyRes = await axios.post(
+        `https://www.google.com/recaptcha/api/siteverify?secret=${secretKey}&response=${body.captchaToken}`
+      );
+
+      if (!verifyRes.data.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Échec de la vérification reCAPTCHA.",
+        });
+      }
+    } catch (err) {
+      console.error("error during recaptcha verification", err);
+      return res.status(500).json({
+        success: false,
+        message: "Erreur lors de la vérification reCAPTCHA.",
+      });
+    }
+  }
+
   const result = await AuthFlowService.adminSignIn(body.email, body.password);
 
   if (!result.success) {
