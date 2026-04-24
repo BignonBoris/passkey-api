@@ -1506,7 +1506,7 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
 
       await User.update({ isAvailable: false }, { where: { id: driverId } });
       const [driver, media] = await Promise.all([
-        User.findByPk(driverId, { raw: true }) as Promise<Record<string, unknown> | null>,
+        User.findByPk(driverId, { raw: true }) as unknown as Promise<Record<string, unknown> | null>,
         resolveDriverMedia({ driverId: String(driverId || "").trim() }),
       ]);
       if (!driver) return res.status(404).json({ success: false, message: "Livreur introuvable." });
