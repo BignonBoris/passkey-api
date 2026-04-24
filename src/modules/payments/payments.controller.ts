@@ -11,8 +11,10 @@ import {
   syncPaymentWithFedaPay,
 } from "../../services/fedapay.service";
 import {
+  createStripeOffSessionPayment,
   constructStripeEventFromWebhook,
   createStripeCheckout,
+  extractSavedStripeCardDetails,
   extractStripeSessionIdFromWebhook,
   isStripeConfigured,
   syncPaymentWithStripe,
@@ -114,6 +116,66 @@ function paymentResponse(payment: Payment) {
     createdAt: payment.get("createdAt"),
     updatedAt: payment.get("updatedAt"),
   };
+}
+
+function toBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "").trim().toLowerCase();
+  return ["1", "true", "yes", "oui", "on"].includes(normalized);
+}
+
+function savedStripeCardResponse(user: User | null) {
+  if (!user) return null;
+  const paymentMethodId = String(user.get("stripeDefaultPaymentMethodId") || "").trim();
+  if (!paymentMethodId) return null;
+  return {
+    hasSavedCard: true,
+    brand: String(user.get("stripeDefaultPaymentBrand") || "").trim() || null,
+    last4: String(user.get("stripeDefaultPaymentLast4") || "").trim() || null,
+    expMonth: Number(user.get("stripeDefaultPaymentExpMonth") || 0) || null,
+    expYear: Number(user.get("stripeDefaultPaymentExpYear") || 0) || null,
+    savedAt: user.get("stripeDefaultPaymentSavedAt") || null,
+  };
+}
+
+async function persistSavedStripeCardFromPayment(params: {
+  payment: Payment;
+  user: User;
+}) {
+  const rawPayload = String(params.payment.get("rawProviderPayload") || "").trim();
+  if (!rawPayload) return;
+
+  let payload: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(rawPayload);
+    if (parsed && typeof parsed === "object") {
+      payload = parsed as Record<string, unknown>;
+    }
+  } catch (_) {
+    payload = null;
+  }
+  if (!payload) return;
+
+  const shouldSave =
+    String(payload.metadata && typeof payload.metadata === "object"
+      ? (payload.metadata as Record<string, unknown>).savePaymentMethodForFuture || ""
+      : "",
+    )
+      .trim()
+      .toLowerCase() === "true";
+  if (!shouldSave) return;
+
+  const details = extractSavedStripeCardDetails(payload);
+  if (!details) return;
+
+  params.user.set("stripeCustomerId", details.customerId);
+  params.user.set("stripeDefaultPaymentMethodId", details.paymentMethodId);
+  params.user.set("stripeDefaultPaymentBrand", details.brand);
+  params.user.set("stripeDefaultPaymentLast4", details.last4);
+  params.user.set("stripeDefaultPaymentExpMonth", details.expMonth);
+  params.user.set("stripeDefaultPaymentExpYear", details.expYear);
+  params.user.set("stripeDefaultPaymentSavedAt", new Date());
+  await params.user.save();
 }
 
 async function resolveDriverRevenueConfigForOrder(order: Order) {
@@ -220,6 +282,8 @@ async function emitPaymentStatusChanged(
     destinationAddress: String(order.get("destinationAddress") || ""),
     paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
     paymentCheckoutStartedAt: order.get("paymentCheckoutStartedAt") || null,
+    paymentPromptAttemptCount: Number(order.get("paymentPromptAttemptCount") || 0),
+    paymentCheckoutStatus: order.get("paymentCheckoutStatus") || null,
   };
 
   io?.to(`user_${order.get("userId")}`).emit("payment_status_changed", payload);
@@ -253,6 +317,8 @@ async function emitPaymentCheckoutRequested(
     destinationAddress: String(order.get("destinationAddress") || ""),
     paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
     paymentCheckoutStartedAt: order.get("paymentCheckoutStartedAt") || null,
+    paymentPromptAttemptCount: Number(order.get("paymentPromptAttemptCount") || 0),
+    paymentCheckoutStatus: order.get("paymentCheckoutStatus") || null,
   };
 
   io?.to(`user_${order.get("userId")}`).emit("payment_checkout_requested", payload);
@@ -275,6 +341,78 @@ async function emitPaymentCheckoutRequested(
       }
     );
   }
+}
+
+async function reconcileOrderAfterPaymentUpdate(
+  req: AuthenticatedRequest,
+  params: {
+    payment: Payment;
+    order: Order;
+  },
+) {
+  const { payment, order } = params;
+  const nextStatus = String(payment.get("status") || "").trim().toUpperCase();
+
+  if (nextStatus === "PAID") {
+    order.set("paymentPromptDeadlineAt", null);
+    order.set("paymentCheckoutStartedAt", null);
+    order.set("paymentCheckoutStatus", "PAID");
+    await order.save();
+    return;
+  }
+
+  if (nextStatus !== "FAILED") return;
+
+  const attemptCount = Number(order.get("paymentPromptAttemptCount") || 0);
+  if (attemptCount >= 2) {
+    order.set("status", "CANCELLED");
+    order.set("cancelledAt", new Date());
+    order.set("cancelledBy", "SYSTEM");
+    order.set(
+      "cancellationReason",
+      "Le paiement a echoue apres deux tentatives.",
+    );
+    order.set("paymentPromptDeadlineAt", null);
+    order.set("paymentCheckoutStartedAt", null);
+    order.set("paymentCheckoutStatus", "FAILED_FINAL");
+    await order.save();
+
+    const driverId = String(order.get("driverId") || "").trim();
+    if (driverId) {
+      await User.update({ isAvailable: true }, { where: { id: driverId } });
+    }
+
+    const io = (req as any).io;
+    const cancellationPayload = {
+      orderId: String(order.get("id") || ""),
+      status: "CANCELLED",
+      cancelledBy: "SYSTEM",
+      cancellationReason: "Le paiement a echoue apres deux tentatives.",
+      payment_method: String(payment.get("method") || "CASH"),
+      payment_status: nextStatus,
+      paymentPromptDeadlineAt: null,
+      paymentCheckoutStartedAt: null,
+      paymentPromptAttemptCount: attemptCount,
+      paymentCheckoutStatus: "FAILED_FINAL",
+    };
+    io?.to(`user_${order.get("userId")}`).emit(
+      "order_status_changed",
+      cancellationPayload,
+    );
+    if (driverId) {
+      io?.to(`user_${driverId}`).emit(
+        "order_status_changed",
+        cancellationPayload,
+      );
+    }
+    return;
+  }
+
+  order.set("paymentPromptDeadlineAt", new Date(Date.now() + 3 * 60 * 1000));
+  order.set("paymentCheckoutStartedAt", null);
+  order.set("paymentPromptAttemptCount", attemptCount + 1);
+  order.set("paymentCheckoutStatus", "FAILED_RETRY_ALLOWED");
+  await order.save();
 }
 
 async function notifyPaymentEvent(
@@ -525,6 +663,8 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
 
     const amount = Math.max(100, Math.round(Number(payment.get("amount") || order.get("price") || 0)));
     const description = String(req.body?.description || `Paiement course PassKey ${orderId}`).trim();
+    const savePaymentMethodForFuture =
+      paymentMethod === "CARD" && toBoolean(req.body?.savePaymentMethodForFuture);
     payment.set("driverId", orderDriverId || null);
     payment.set("amount", amount);
     payment.set("status", "PENDING");
@@ -533,7 +673,12 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
     payment.set("customerPhone", String(user.get("phone") || "").trim() || null);
     payment.set("failureReason", null);
 
-    let responsePayload: { checkoutUrl: string | null; checkoutToken: string | null; message: string };
+    let responsePayload: {
+      checkoutUrl: string | null;
+      checkoutToken: string | null;
+      message: string;
+      autoPaid?: boolean;
+    };
 
     if (paymentMethod === "MOBILE_MONEY") {
       if (!isFedaPayConfigured()) {
@@ -572,12 +717,61 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
         });
       }
 
+      const autoCharge = await createStripeOffSessionPayment({
+        payment,
+        user,
+        amount,
+        description,
+        metadata: { source: "order-payment-auto-charge" },
+      });
+
+      if (autoCharge.success) {
+        payment.set("provider", "STRIPE");
+        payment.set("providerTransactionId", String(autoCharge.paymentIntent.id || "").trim() || null);
+        payment.set("providerReference", String(autoCharge.paymentIntent.id || "").trim() || null);
+        payment.set("merchantReference", `STRIPE-${payment.get("id")}`);
+        payment.set("checkoutUrl", null);
+        payment.set("checkoutToken", null);
+        payment.set("callbackUrl", null);
+        payment.set("rawProviderPayload", JSON.stringify(autoCharge.paymentIntent));
+        payment.set("status", "PAID");
+        payment.set("paidAt", new Date());
+        payment.set("failureReason", null);
+
+        order.set("paymentCheckoutStartedAt", null);
+        order.set("paymentPromptDeadlineAt", null);
+        order.set("paymentCheckoutStatus", "PAID");
+        await order.save();
+        await payment.save();
+
+        await notifyPaymentEvent(req, {
+          payment,
+          order,
+          previousStatus: "PENDING",
+          actorRole,
+          sourceEvent: "PAYMENT_AUTO_CHARGED",
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Paiement automatique effectue avec la carte enregistree.",
+          data: {
+            payment: paymentResponse(payment),
+            checkoutUrl: null,
+            checkoutToken: null,
+            autoPaid: true,
+            savedCard: savedStripeCardResponse(user),
+          },
+        });
+      }
+
       const checkout = await createStripeCheckout({
         payment,
         user,
         amount,
         description,
         metadata: { source: "order-payment-checkout" },
+        savePaymentMethodForFuture,
       });
 
       payment.set("provider", "STRIPE");
@@ -597,6 +791,7 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
 
     order.set("paymentCheckoutStartedAt", new Date());
     order.set("paymentPromptDeadlineAt", null);
+    order.set("paymentCheckoutStatus", "IN_PROGRESS");
     await order.save();
     await payment.save();
 
@@ -620,6 +815,8 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
         payment: paymentResponse(payment),
         checkoutUrl: responsePayload.checkoutUrl,
         checkoutToken: responsePayload.checkoutToken,
+        autoPaid: responsePayload.autoPaid ?? false,
+        savedCard: savedStripeCardResponse(user),
       },
     });
   } catch (error) {
@@ -662,6 +859,30 @@ export async function getPaymentStatus(req: AuthenticatedRequest, res: Response)
   }
 }
 
+export async function getStripeSavedCard(req: AuthenticatedRequest, res: Response) {
+  try {
+    const requesterId = String(req.user?.id || "").trim();
+    if (!requesterId) {
+      return res.status(401).json({ success: false, message: "Non authentifie" });
+    }
+
+    const user = await User.findByPk(requesterId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: savedStripeCardResponse(user) ?? { hasSavedCard: false },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Impossible de charger la carte Stripe",
+    });
+  }
+}
+
 export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response) {
   try {
     const requesterId = req.user?.id;
@@ -680,19 +901,21 @@ export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response
       return res.status(403).json({ success: false, message: "Acces refuse" });
     }
 
-    const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
-    const provider = resolvePaymentProvider(payment);
-    if (provider === "FEDAPAY") {
-      await syncPaymentWithFedaPay(payment);
-    } else if (provider === "STRIPE") {
-      await syncPaymentWithStripe(payment);
-    }
-    if (order) {
-      if (String(payment.get("status") || "").trim().toUpperCase() === "PAID") {
-        order.set("paymentPromptDeadlineAt", null);
-        order.set("paymentCheckoutStartedAt", null);
-        await order.save();
+      const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
+      const provider = resolvePaymentProvider(payment);
+      if (provider === "FEDAPAY") {
+        await syncPaymentWithFedaPay(payment);
+      } else if (provider === "STRIPE") {
+        await syncPaymentWithStripe(payment);
+        if (order) {
+          const user = await User.findByPk(String(order.get("userId") || ""));
+          if (user) {
+            await persistSavedStripeCardFromPayment({ payment, user });
+          }
+        }
       }
+    if (order) {
+      await reconcileOrderAfterPaymentUpdate(req, { payment, order });
       await notifyPaymentEvent(req, {
         payment,
         order,
@@ -727,6 +950,7 @@ export async function handleFedaPayCallback(req: AuthenticatedRequest, res: Resp
         await syncPaymentWithFedaPay(payment);
         const order = await Order.findByPk(String(payment.get("orderId") || ""));
         if (order) {
+          await reconcileOrderAfterPaymentUpdate(req, { payment, order });
           await notifyPaymentEvent(req, {
             payment,
             order,
@@ -775,12 +999,17 @@ export async function handleStripeCallback(req: AuthenticatedRequest, res: Respo
         if (sessionId) {
           payment.set("providerTransactionId", sessionId);
         }
-        await payment.save();
-        await syncPaymentWithStripe(payment);
-        const order = await Order.findByPk(String(payment.get("orderId") || ""));
-        if (order) {
-          await notifyPaymentEvent(req, {
-            payment,
+          await payment.save();
+          await syncPaymentWithStripe(payment);
+          const order = await Order.findByPk(String(payment.get("orderId") || ""));
+          if (order) {
+            const user = await User.findByPk(String(order.get("userId") || ""));
+            if (user) {
+              await persistSavedStripeCardFromPayment({ payment, user });
+            }
+            await reconcileOrderAfterPaymentUpdate(req, { payment, order });
+            await notifyPaymentEvent(req, {
+              payment,
             order,
             previousStatus,
             sourceEvent: "PAYMENT_CALLBACK",
@@ -842,6 +1071,7 @@ export async function handleFedaPayWebhook(req: AuthenticatedRequest, res: Respo
     await syncPaymentWithFedaPay(payment);
     const order = await Order.findByPk(String(payment.get("orderId") || ""));
     if (order) {
+      await reconcileOrderAfterPaymentUpdate(req, { payment, order });
       await notifyPaymentEvent(req, {
         payment,
         order,
@@ -879,15 +1109,20 @@ export async function handleStripeWebhook(req: AuthenticatedRequest, res: Respon
     }
 
     const previousStatus = String(payment.get("status") || "").trim().toUpperCase();
-    payment.set("callbackReceivedAt", new Date());
-    payment.set("rawProviderPayload", rawPayload);
-    await payment.save();
-    await syncPaymentWithStripe(payment);
+      payment.set("callbackReceivedAt", new Date());
+      payment.set("rawProviderPayload", rawPayload);
+      await payment.save();
+      await syncPaymentWithStripe(payment);
 
-    const order = await Order.findByPk(String(payment.get("orderId") || ""));
-    if (order) {
-      await notifyPaymentEvent(req, {
-        payment,
+      const order = await Order.findByPk(String(payment.get("orderId") || ""));
+      if (order) {
+        const user = await User.findByPk(String(order.get("userId") || ""));
+        if (user) {
+          await persistSavedStripeCardFromPayment({ payment, user });
+        }
+        await reconcileOrderAfterPaymentUpdate(req, { payment, order });
+        await notifyPaymentEvent(req, {
+          payment,
         order,
         previousStatus,
         sourceEvent: "PAYMENT_WEBHOOK",

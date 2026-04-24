@@ -72,6 +72,28 @@ export const calculateTrip = async (req: Request, res: Response) => {
   }
 
   const distanceKm = routeData.distanceValue / 1000;
+  const maxDeliveryDistanceKm = Number(
+    resolvedCountry.country.get("deliveryDistanceKm") || 0,
+  );
+
+  if (
+    Number.isFinite(maxDeliveryDistanceKm) &&
+    maxDeliveryDistanceKm > 0 &&
+    distanceKm > maxDeliveryDistanceKm
+  ) {
+    const foundDistanceText = distanceKm.toFixed(1);
+    const allowedDistanceText = maxDeliveryDistanceKm.toFixed(1);
+    return res.status(400).json({
+      success: false,
+      message:
+        `La distance estimee (${foundDistanceText} km) depasse la limite autorisee ` +
+        `pour les livraisons (${allowedDistanceText} km).`,
+      data: {
+        distanceKm: Number(foundDistanceText),
+        deliveryDistanceKm: Number(allowedDistanceText),
+      },
+    });
+  }
 
   const options = sourceRows
     .map((source) => {

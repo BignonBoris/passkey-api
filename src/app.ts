@@ -219,6 +219,7 @@ setInterval(async () => {
         cancelledBy: "SYSTEM",
         cancellationReason: "Paiement non lance avant expiration du delai.",
         paymentPromptDeadlineAt: null,
+        paymentCheckoutStatus: "EXPIRED",
       });
 
       const driverId = String(order.get("driverId") || "").trim();
@@ -235,6 +236,10 @@ setInterval(async () => {
         payment_status: paymentStatus,
         paymentPromptDeadlineAt: null,
         paymentCheckoutStartedAt: null,
+        paymentPromptAttemptCount: Number(
+          order.get("paymentPromptAttemptCount") || 0,
+        ),
+        paymentCheckoutStatus: "EXPIRED",
       };
 
       io.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);

@@ -73,6 +73,7 @@ export async function createStripeCheckout(params: {
   amount: number;
   description: string;
   metadata?: Record<string, unknown>;
+  savePaymentMethodForFuture?: boolean;
 }) {
   if (!isStripeConfigured()) {
     throw new Error("Stripe n'est pas configure sur ce serveur.");
@@ -94,10 +95,22 @@ export async function createStripeCheckout(params: {
   sessionPayload.append("line_items[0][price_data][unit_amount]", amount.toString());
   sessionPayload.append("line_items[0][price_data][product_data][name]", params.description);
   sessionPayload.append("line_items[0][price_data][product_data][description]", params.description);
-  sessionPayload.append("customer_email", buildFallbackEmail(params.user));
+  const customerId = await ensureStripeCustomer(params.user);
+  if (customerId) {
+    sessionPayload.append("customer", customerId);
+  } else {
+    sessionPayload.append("customer_email", buildFallbackEmail(params.user));
+  }
+  if (params.savePaymentMethodForFuture) {
+    sessionPayload.append("payment_intent_data[setup_future_usage]", "off_session");
+  }
   sessionPayload.append("metadata[paymentId]", params.payment.id);
   sessionPayload.append("metadata[orderId]", params.payment.orderId);
   sessionPayload.append("metadata[userId]", params.payment.userId);
+  sessionPayload.append(
+    "metadata[savePaymentMethodForFuture]",
+    params.savePaymentMethodForFuture ? "true" : "false",
+  );
 
   for (const [key, value] of Object.entries(params.metadata || {})) {
     if (value === undefined || value === null) continue;
@@ -120,6 +133,137 @@ export async function createStripeCheckout(params: {
   };
 }
 
+export async function ensureStripeCustomer(user: User) {
+  if (!isStripeConfigured()) {
+    throw new Error("Stripe n'est pas configure sur ce serveur.");
+  }
+
+  const existingCustomerId = String(user.get("stripeCustomerId") || "").trim();
+  if (existingCustomerId) return existingCustomerId;
+
+  const customerPayload = new URLSearchParams();
+  const name = String(user.get("name") || "").trim();
+  const email = buildFallbackEmail(user);
+  const phone = String(user.get("phone") || "").trim();
+
+  if (name) customerPayload.append("name", name);
+  if (email) customerPayload.append("email", email);
+  if (phone) customerPayload.append("phone", phone);
+  customerPayload.append("metadata[userId]", String(user.get("id") || "").trim());
+
+  const response = await axios.post(
+    `${getStripeApiBaseUrl()}/customers`,
+    customerPayload.toString(),
+    { headers: getAuthHeaders() },
+  );
+
+  const customerId = String(response.data?.id || "").trim();
+  if (!customerId) {
+    throw new Error("Impossible de creer le client Stripe.");
+  }
+
+  user.set("stripeCustomerId", customerId);
+  await user.save();
+  return customerId;
+}
+
+export async function createStripeOffSessionPayment(params: {
+  payment: Payment;
+  user: User;
+  amount: number;
+  description: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (!isStripeConfigured()) {
+    throw new Error("Stripe n'est pas configure sur ce serveur.");
+  }
+
+  const customerId = String(params.user.get("stripeCustomerId") || "").trim();
+  const paymentMethodId = String(
+    params.user.get("stripeDefaultPaymentMethodId") || "",
+  ).trim();
+  if (!customerId || !paymentMethodId) {
+    return { success: false as const, reason: "NO_SAVED_CARD" };
+  }
+
+  const amount = Math.max(100, Math.round(Number(params.amount || 0)));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Montant de paiement invalide.");
+  }
+
+  const intentPayload = new URLSearchParams();
+  intentPayload.append("amount", amount.toString());
+  intentPayload.append("currency", "xof");
+  intentPayload.append("customer", customerId);
+  intentPayload.append("payment_method", paymentMethodId);
+  intentPayload.append("off_session", "true");
+  intentPayload.append("confirm", "true");
+  intentPayload.append("description", params.description);
+  intentPayload.append("metadata[paymentId]", params.payment.id);
+  intentPayload.append("metadata[orderId]", params.payment.orderId);
+  intentPayload.append("metadata[userId]", params.payment.userId);
+  for (const [key, value] of Object.entries(params.metadata || {})) {
+    if (value === undefined || value === null) continue;
+    intentPayload.append(`metadata[${key}]`, String(value));
+  }
+
+  try {
+    const response = await axios.post(
+      `${getStripeApiBaseUrl()}/payment_intents`,
+      intentPayload.toString(),
+      { headers: getAuthHeaders() },
+    );
+    const paymentIntent = response.data as Record<string, unknown>;
+    return { success: true as const, paymentIntent };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      return {
+        success: false as const,
+        reason: "ACTION_REQUIRED",
+        error: error.response?.data ?? error.message,
+      };
+    }
+    throw error;
+  }
+}
+
+export function extractSavedStripeCardDetails(
+  payload: Record<string, unknown>,
+): null | {
+  customerId: string;
+  paymentMethodId: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+} {
+  const customerId = String(payload.customer || "").trim();
+  const paymentIntent =
+    payload.payment_intent && typeof payload.payment_intent === "object"
+      ? (payload.payment_intent as Record<string, unknown>)
+      : null;
+  const paymentMethod =
+    paymentIntent?.payment_method && typeof paymentIntent.payment_method === "object"
+      ? (paymentIntent.payment_method as Record<string, unknown>)
+      : null;
+  const card =
+    paymentMethod?.card && typeof paymentMethod.card === "object"
+      ? (paymentMethod.card as Record<string, unknown>)
+      : null;
+
+  const paymentMethodId = String(paymentMethod?.id || "").trim();
+  if (!customerId || !paymentMethodId) return null;
+
+  return {
+    customerId,
+    paymentMethodId,
+    brand: String(card?.brand || "").trim() || null,
+    last4: String(card?.last4 || "").trim() || null,
+    expMonth: Number.isFinite(Number(card?.exp_month)) ? Number(card?.exp_month) : null,
+    expYear: Number.isFinite(Number(card?.exp_year)) ? Number(card?.exp_year) : null,
+  };
+}
+
 export async function syncPaymentWithStripe(payment: Payment) {
   if (!isStripeConfigured()) {
     throw new Error("Stripe n'est pas configure sur ce serveur.");
@@ -137,7 +281,7 @@ export async function syncPaymentWithStripe(payment: Payment) {
         Authorization: `Bearer ${getStripeSecretKey()}`,
       },
       params: {
-        "expand[]": "payment_intent",
+        "expand[]": ["payment_intent", "payment_intent.payment_method"],
       },
     },
   );

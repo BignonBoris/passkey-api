@@ -16,11 +16,14 @@ class Order extends Model {
   public searchStartedAt!: Date;
   public paymentPromptDeadlineAt?: Date | null;
   public paymentCheckoutStartedAt?: Date | null;
+  public paymentPromptAttemptCount!: number;
+  public paymentCheckoutStatus?: string | null;
   public completionOtpValidatedAt?: Date | null;
   public pickupLocation!: string;
   public pickupAddress!: string;
   public destinationLocation!: string;
   public destinationAddress!: string;
+  public deliveryPhone?: string | null;
   public distance!: string;
   public price!: number;
   public revenuePerDelivery!: number;
@@ -51,6 +54,8 @@ class Order extends Model {
   public pricingSnapshotJson?: string | null;
   public parcelNature?: string | null;
   public packageDescription?: string | null;
+  public packageSize?: string | null;
+  public packageWeight?: string | null;
   public driverRating?: number | null;
   public driverRatingComment?: string | null;
   public driverRatedAt?: Date | null;
@@ -117,6 +122,15 @@ Order.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    paymentPromptAttemptCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    paymentCheckoutStatus: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     completionOtpValidatedAt: {
       type: DataTypes.DATE,
       allowNull: true,
@@ -136,6 +150,10 @@ Order.init(
     destinationAddress: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    deliveryPhone: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     distance: {
       type: DataTypes.STRING,
@@ -216,6 +234,14 @@ Order.init(
     },
     packageDescription: {
       type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    packageSize: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    packageWeight: {
+      type: DataTypes.STRING,
       allowNull: true,
     },
     driverRating: {

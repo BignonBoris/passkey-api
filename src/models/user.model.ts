@@ -32,6 +32,13 @@ class User extends Model {
   public otpExpiresAt?: Date | null;
   public rating!: number;
   public ratingCount!: number;
+  public stripeCustomerId?: string | null;
+  public stripeDefaultPaymentMethodId?: string | null;
+  public stripeDefaultPaymentBrand?: string | null;
+  public stripeDefaultPaymentLast4?: string | null;
+  public stripeDefaultPaymentExpMonth?: number | null;
+  public stripeDefaultPaymentExpYear?: number | null;
+  public stripeDefaultPaymentSavedAt?: Date | null;
 }
 
 User.init({
@@ -126,6 +133,34 @@ User.init({
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 0,
+  },
+  stripeCustomerId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  stripeDefaultPaymentMethodId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  stripeDefaultPaymentBrand: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  stripeDefaultPaymentLast4: {
+    type: DataTypes.STRING(4),
+    allowNull: true,
+  },
+  stripeDefaultPaymentExpMonth: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  stripeDefaultPaymentExpYear: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  stripeDefaultPaymentSavedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
   },
   latitude: {
     type: DataTypes.FLOAT,

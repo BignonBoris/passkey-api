@@ -194,6 +194,14 @@ async function ensureOrderPaymentPromptColumns() {
       name: "paymentCheckoutStartedAt",
       definition: { type: DataTypes.DATE, allowNull: true },
     },
+    {
+      name: "paymentPromptAttemptCount",
+      definition: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    },
+    {
+      name: "paymentCheckoutStatus",
+      definition: { type: DataTypes.STRING, allowNull: true },
+    },
   ];
 
   for (const column of optionalColumns) {
@@ -262,6 +270,13 @@ async function ensureUserSchema() {
     { name: "suspendedBy", definition: { type: DataTypes.UUID, allowNull: true } },
     { name: "reactivatedAt", definition: { type: DataTypes.DATE, allowNull: true } },
     { name: "reactivatedBy", definition: { type: DataTypes.UUID, allowNull: true } },
+    { name: "stripeCustomerId", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "stripeDefaultPaymentMethodId", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "stripeDefaultPaymentBrand", definition: { type: DataTypes.STRING, allowNull: true } },
+    { name: "stripeDefaultPaymentLast4", definition: { type: DataTypes.STRING(4), allowNull: true } },
+    { name: "stripeDefaultPaymentExpMonth", definition: { type: DataTypes.INTEGER, allowNull: true } },
+    { name: "stripeDefaultPaymentExpYear", definition: { type: DataTypes.INTEGER, allowNull: true } },
+    { name: "stripeDefaultPaymentSavedAt", definition: { type: DataTypes.DATE, allowNull: true } },
   ];
 
   for (const col of userColumns) {
@@ -922,6 +937,13 @@ async function ensureOrderOtpColumns() {
       allowNull: true,
     });
   }
+
+  if (!columns.deliveryPhone) {
+    await queryInterface.addColumn(tableName, "deliveryPhone", {
+      type: DataTypes.STRING,
+      allowNull: true,
+    });
+  }
 }
 
 async function ensureOrderRevenueColumns() {
@@ -991,6 +1013,14 @@ async function ensureOrderPricingColumns() {
   });
   await addColumn("packageDescription", {
     type: DataTypes.TEXT,
+    allowNull: true,
+  });
+  await addColumn("packageSize", {
+    type: DataTypes.STRING,
+    allowNull: true,
+  });
+  await addColumn("packageWeight", {
+    type: DataTypes.STRING,
     allowNull: true,
   });
   await addColumn("driverArrivedPickupAt", {
@@ -1437,8 +1467,8 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
 async function seedVehicleTypes() {
   const defaults = [
     { code: "moto", name: "Moto", iconKey: "two_wheeler_rounded", sortOrder: 1, isActive: true },
-    { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
-    { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
+    // { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
+    // { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
   ];
 
   for (const item of defaults) {
