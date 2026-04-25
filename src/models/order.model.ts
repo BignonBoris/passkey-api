@@ -6,6 +6,7 @@ import { DEFAULT_COUNTRY_ID } from "../constants/countries";
 
 class Order extends Model {
   public id!: string;
+  public publicCode!: string;
   public countryId!: string;
   public userId!: string;
   public driverId?: string;
@@ -77,6 +78,11 @@ Order.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
+    },
+    publicCode: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      unique: true,
     },
     countryId: {
       type: DataTypes.STRING(16),

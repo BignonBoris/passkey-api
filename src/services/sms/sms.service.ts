@@ -10,6 +10,24 @@ export class SmsService {
   private static readonly fmClient = new FasterMessageClient();
   private static readonly twilioClient = new TwilioClient();
 
+  public static async sendSmsViaTwilio(phone: string, message: string): Promise<boolean> {
+    try {
+      console.log(`[SmsService] Debut envoi force (twilio) vers ${phone}...`);
+      const res = await this.twilioClient.sendSms(phone, message);
+      if (res.status) {
+        console.log(`[SmsService] Message envoye avec succes via twilio a ${phone}.`);
+        return true;
+      }
+      console.error(
+        `[SmsService] Echec envoi via twilio vers ${phone}. Cause: ${res.error || 'unknown'}`,
+      );
+      return false;
+    } catch (error) {
+      console.error(`[SmsService] Erreur critique twilio lors de l'envoi a ${phone} :`, error);
+      return false;
+    }
+  }
+
   /**
    * Envoie un SMS simple
    * @param phone Numéro de téléphone (format complet recommandé)

@@ -23,6 +23,7 @@ import { sendPushNotification } from "../../services/notification.service";
 import DriverRevenueConfig from "../../models/driver-revenue-config.model";
 import { calculateCourseRevenueSettlement } from "../../services/revenue.service";
 import { applyDriverAccountMovement } from "../driver-funding/driver-funding.service";
+import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
 import { resolveCountryId } from "../../services/country.service";
 
 function normalizeRole(role: unknown) {
@@ -520,6 +521,7 @@ export async function createTestPaymentCheckout(req: AuthenticatedRequest, res: 
     const description = String(req.body?.description || "Paiement test PassKey").trim();
 
     const order = await Order.create({
+      publicCode: await generateUniqueOrderPublicCode("PAY"),
       userId,
       pickupLocation: "6.3703,2.3912",
       pickupAddress: "Paiement test - Depart",

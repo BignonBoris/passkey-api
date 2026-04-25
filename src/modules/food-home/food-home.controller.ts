@@ -10,6 +10,7 @@ import FoodHomeRestaurant from "../../models/food-home-restaurant.model";
 import User from "../../models/user.model";
 import UserAddress from "../../models/user-address.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
+import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
 
 function buildPublicUploadUrl(req: Request, folder: string, storedName: string) {
   const protocol = req.protocol;
@@ -1292,6 +1293,7 @@ export async function createFoodOrder(req: AuthenticatedRequest, res: Response) 
 
     const estimatedDeliveryMinutes = Number(restaurant.get("deliveryMinutes") || 0);
     const order = await Order.create({
+      publicCode: await generateUniqueOrderPublicCode("FOO"),
       userId,
       pickupLocation: "0,0",
       pickupAddress: String(restaurant.get("name") || "Restaurant"),

@@ -5,6 +5,7 @@ import User from "../models/user.model";
 import DriverVehicle from "../models/driver-vehicle.model";
 import { calculateDeliveryPricing } from "./pricing.service";
 import { getRouteDetails } from "../modules/maps/maps.service";
+import { generateUniqueOrderPublicCode } from "../utils/orderPublicCode";
 
 const RETURN_ELIGIBLE_STATUSES = new Set([
   "DRIVER_LEFT_PICKUP",
@@ -233,6 +234,7 @@ export async function confirmCancelAfterPickup(params: {
 
     const returnOrder = await Order.create(
       {
+        publicCode: await generateUniqueOrderPublicCode("RET"),
         countryId: String(order.get("countryId") || ""),
         userId,
         driverId,

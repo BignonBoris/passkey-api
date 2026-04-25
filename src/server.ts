@@ -69,6 +69,7 @@ async function startServer() {
     await ensureDefaultCountries();
     await ensureOrderArchiveColumn();
     await ensureOrderOtpColumns();
+    await ensureOrderPublicCodeColumn();
     await ensureOrderPaymentPromptColumns();
     await ensureOrderRevenueColumns();
     await ensureOrderPricingColumns();
@@ -941,6 +942,19 @@ async function ensureOrderOtpColumns() {
   if (!columns.deliveryPhone) {
     await queryInterface.addColumn(tableName, "deliveryPhone", {
       type: DataTypes.STRING,
+      allowNull: true,
+    });
+  }
+}
+
+async function ensureOrderPublicCodeColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Order";
+  const columns = await queryInterface.describeTable(tableName);
+
+  if (!columns.publicCode) {
+    await queryInterface.addColumn(tableName, "publicCode", {
+      type: DataTypes.STRING(32),
       allowNull: true,
     });
   }
