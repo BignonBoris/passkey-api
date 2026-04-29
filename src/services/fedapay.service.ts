@@ -243,6 +243,23 @@ export async function createFedaPayCheckout(params: {
   const callbackUrl = buildCallbackUrl(params.payment.id);
   const merchantReference = `PAY-${params.payment.id}`;
   const mode = String(process.env.FEDAPAY_PAYMENT_MODE || "mtn_open").trim();
+  const customerName = splitCustomerName(String(params.user.get("name") || "").trim());
+  const customerEmail = buildFallbackEmail(params.user);
+  const customerPhoneNumber = buildFedaPayLocalPhoneNumber(
+    String(params.payment.get("customerPhone") || params.user.get("phone") || "").trim(),
+  );
+  const customerPayload: Record<string, unknown> = {
+    firstname: customerName.firstname,
+    lastname: customerName.lastname,
+    email: customerEmail,
+  };
+
+  if (customerPhoneNumber) {
+    customerPayload.phone_number = {
+      number: customerPhoneNumber,
+      country: getCountryCode(),
+    };
+  }
 
   const createPayload = {
     description: params.description,
@@ -251,6 +268,7 @@ export async function createFedaPayCheckout(params: {
     callback_url: callbackUrl,
     merchant_reference: merchantReference,
     mode,
+    customer: customerPayload,
     metadata: {
       paymentId: params.payment.id,
       orderId: params.payment.orderId,

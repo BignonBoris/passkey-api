@@ -184,15 +184,15 @@ async function buildTrackingDataForOrder(orderId: string) {
 
     driver = driverResult
       ? ({
-        ...(driverResult as unknown as Record<string, unknown>),
-        photoUrl: media.driverPhotoUrl || (driverResult as any).avatarUrl || "",
-      } as Record<string, unknown>)
+          ...(driverResult as unknown as Record<string, unknown>),
+          photoUrl: media.driverPhotoUrl || (driverResult as any).avatarUrl || "",
+        } as Record<string, unknown>)
       : null;
     vehicle = vehicleResult
       ? ({
-        ...(vehicleResult as unknown as Record<string, unknown>),
-        photoUrl: media.vehiclePhotoUrl || "",
-      } as Record<string, unknown>)
+          ...(vehicleResult as unknown as Record<string, unknown>),
+          photoUrl: media.vehiclePhotoUrl || "",
+        } as Record<string, unknown>)
       : null;
   }
 
@@ -209,11 +209,11 @@ async function buildTrackingDataForOrder(orderId: string) {
   const eta =
     latitude != null && longitude != null
       ? await buildDeliveryEtaPayload({
-        orderId,
-        order,
-        latitude,
-        longitude,
-      })
+          orderId,
+          order,
+          latitude,
+          longitude,
+        })
       : null;
 
   return {
@@ -431,13 +431,13 @@ async function buildDeliveryEtaPayload(params: {
 
   const payload = route
     ? {
-      remainingSeconds: Math.max(0, Number(route.durationValue) || 0),
-      remainingText: String(route.durationText || "").trim(),
-      distanceMeters: Math.max(0, Number(route.distanceValue) || 0),
-      distanceText: String(route.distanceText || "").trim(),
-      target: "DESTINATION" as const,
-      computedAt: new Date().toISOString(),
-    }
+        remainingSeconds: Math.max(0, Number(route.durationValue) || 0),
+        remainingText: String(route.durationText || "").trim(),
+        distanceMeters: Math.max(0, Number(route.distanceValue) || 0),
+        distanceText: String(route.distanceText || "").trim(),
+        target: "DESTINATION" as const,
+        computedAt: new Date().toISOString(),
+      }
     : null;
 
   deliveryEtaCache.set(orderId, {
@@ -611,7 +611,6 @@ async function buildDriverDeliveryRequestPayload(order: Order, paymentRow: any) 
   const customer = userId ? await User.findByPk(userId) : null;
   const rawSearchStartedAt = order.get('searchStartedAt') || new Date();
   const searchStartedAtIso = new Date(String(rawSearchStartedAt)).toISOString();
-
   return {
     type: "NEW_DELIVERY_REQUEST",
     requestId: orderId,
@@ -683,18 +682,15 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   const nearbyDrivers = drivers.filter(d => {
     if (!isTruthyAvailability(d.get('isAvailable'))) return false;
 
-    // TODO: [TEST] Condition de position GPS désactivée pour les tests
-    // if (d.get('latitude') == null || d.get('longitude') == null) return false;
+    if (d.get('latitude') == null || d.get('longitude') == null) return false;
     const dist = (d.get('latitude') != null && d.get('longitude') != null)
       ? calculateDistance(pickup.lat, pickup.lng, Number(d.get('latitude')), Number(d.get('longitude')))
       : 0;
 
-    // TODO: [TEST] Filtre du rayon de recherche désactivé (≤ radiusKm km) — réactiver en production
-    // const isNearby = dist <= radiusKm;
-    const isNearby = true;
+    const isNearby = dist <= radiusKm;
 
     if (isNearby) {
-      console.log(`   -> Livreur [${d.get('id')}] ${d.get('name') ?? 'N/A'} (${d.get('phone')}): SÉLECTIONNÉ (dist: ${dist.toFixed(2)} km, rayon ignoré pour test)`);
+      console.log(`   -> Livreur [${d.get('id')}] ${d.get('name') ?? 'N/A'} (${d.get('phone')}): SÉLECTIONNÉ (dist: ${dist.toFixed(2)} km, rayon: ${radiusKm} km)`);
     }
     return isNearby;
   });
@@ -705,6 +701,15 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
     id: String(driver.get('id') || '').trim(),
     name: String(driver.get('name') || 'Livreur').trim(),
     phone: String(driver.get('phone') || '').trim(),
+  }));
+  const notifiedDrivers = nearbyDrivers.map((driver) => ({
+    id: String(driver.get('id') || '').trim(),
+    name: String(driver.get('name') || 'Livreur').trim(),
+    phone: String(driver.get('phone') || '').trim(),
+    latitude:
+      driver.get('latitude') != null ? Number(driver.get('latitude')) : null,
+    longitude:
+      driver.get('longitude') != null ? Number(driver.get('longitude')) : null,
   }));
   await beginOrderSearchAttempt(String(order.get('id') || ''), driverSnapshots);
 
@@ -729,6 +734,10 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   });
 
   await Promise.all(pushPromises);
+  return {
+    radiusKm,
+    notifiedDrivers,
+  };
 }
 
 export const createOrder = async (req: Request, res: Response) => {
@@ -751,21 +760,21 @@ export const createOrder = async (req: Request, res: Response) => {
       tip: parseNumber(tip) ?? 0,
       pickupTimestamp,
     });
-    const newOrder = await Order.create({
-      publicCode: await generateUniqueOrderPublicCode("CRS"),
-      countryId,
-      userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress,
-      price: pricing.price, distance, revenuePerDelivery: pricing.driverEarnings,
-      platformCommission: pricing.platformCommission, serviceFee: pricing.serviceFee,
-      completionOtp: generateCompletionOtp(), vehicleType: vehicleId, status: "PENDING",
-      deliveryPhone,
-      searchStartedAt: new Date(),
-      pricingSnapshotJson: JSON.stringify(pricing.snapshot),
-      parcelNature,
-      packageDescription: parcelNature,
-      packageSize: packageSize || null,
-      packageWeight: packageWeight || null,
-    });
+      const newOrder = await Order.create({
+        publicCode: await generateUniqueOrderPublicCode("CRS"),
+        countryId,
+        userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress,
+        price: pricing.price, distance, revenuePerDelivery: pricing.driverEarnings,
+        platformCommission: pricing.platformCommission, serviceFee: pricing.serviceFee,
+        completionOtp: generateCompletionOtp(), vehicleType: vehicleId, status: "PENDING",
+        deliveryPhone,
+        searchStartedAt: new Date(),
+        pricingSnapshotJson: JSON.stringify(pricing.snapshot),
+        parcelNature,
+        packageDescription: parcelNature,
+        packageSize: packageSize || null,
+        packageWeight: packageWeight || null,
+      });
     const paymentRow = await Payment.create({ orderId: newOrder.get('id'), userId, amount: pricing.price, currency: "XOF", status: "PENDING", method: paymentMethod });
     await sendCompletionOtpSmsIfPossible({
       phone: deliveryPhone,
@@ -773,9 +782,32 @@ export const createOrder = async (req: Request, res: Response) => {
       parcelNature,
     });
     const io: Server = (req as any).io;
-    if (!simulationMode) notifyNearbyDrivers(newOrder, io, pricing, paymentRow).catch(console.error);
+    let notifiedDriversPayload: any[] = [];
+    let searchRadiusKm: number | null = null;
+    if (!simulationMode) {
+      try {
+        const notifyResult = await notifyNearbyDrivers(
+          newOrder,
+          io,
+          pricing,
+          paymentRow,
+        );
+        notifiedDriversPayload = notifyResult?.notifiedDrivers ?? [];
+        searchRadiusKm =
+          typeof notifyResult?.radiusKm === 'number' ? notifyResult.radiusKm : null;
+      } catch (error) {
+        console.error(error);
+      }
+    }
     io.to('rides').emit('ride:created', newOrder);
-    return res.status(201).json({ success: true, order: newOrder, payment: paymentRow, completionOtp: String(newOrder.get('completionOtp') || '') });
+    return res.status(201).json({
+      success: true,
+      order: newOrder,
+      payment: paymentRow,
+      completionOtp: String(newOrder.get('completionOtp') || ''),
+      notifiedDrivers: notifiedDriversPayload,
+      searchRadiusKm,
+    });
   } catch (error) {
     return res.status(500).json({ error: "Creation failed" });
   }
@@ -958,14 +990,14 @@ export const confirmCancelAfterPickupFlow = async (req: Request, res: Response) 
         tracking: returnTracking,
         quote: result.quote
           ? {
-            distanceText: result.quote.distanceText,
-            durationText: result.quote.durationText,
-            initialOrderAmount: result.quote.initialOrderAmount,
-            initialUnpaidAmount: result.quote.initialUnpaidAmount,
-            returnAmount: result.quote.returnAmount,
-            totalAmountDue: result.quote.totalAmountDue,
-            paymentMethod: result.quote.paymentMethod,
-          }
+              distanceText: result.quote.distanceText,
+              durationText: result.quote.durationText,
+              initialOrderAmount: result.quote.initialOrderAmount,
+              initialUnpaidAmount: result.quote.initialUnpaidAmount,
+              returnAmount: result.quote.returnAmount,
+              totalAmountDue: result.quote.totalAmountDue,
+              paymentMethod: result.quote.paymentMethod,
+            }
           : null,
       },
     });
@@ -1032,8 +1064,8 @@ export const getOrders = async (req: Request, res: Response) => {
       where.isArchived = false;
     }
 
-    const orders = await Order.findAll({
-      where,
+    const orders = await Order.findAll({ 
+      where, 
       order: [["createdAt", "DESC"]],
       include: [{ model: Country, as: "country", attributes: ["name"] }]
     });
@@ -1049,8 +1081,8 @@ export const getOrders = async (req: Request, res: Response) => {
             resolveOrderDisplayPayment(String(rawOrder.id || "")),
             currentDriverId
               ? User.findByPk(currentDriverId, {
-                attributes: ["id", "name", "phone", "rating", "avatarUrl"],
-              })
+                  attributes: ["id", "name", "phone", "rating", "avatarUrl"],
+                })
               : Promise.resolve(null),
           ]);
 
@@ -1063,22 +1095,22 @@ export const getOrders = async (req: Request, res: Response) => {
             payment_method: String(payment?.get("method") || rawOrder.payment_method || ""),
             payment: payment
               ? {
-                id: String(payment.get("id") || ""),
-                status: String(payment.get("status") || ""),
-                method: String(payment.get("method") || ""),
-                amount: Number(payment.get("amount") || 0),
-                currency: String(payment.get("currency") || ""),
-                paidAt: payment.get("paidAt") || null,
-              }
+                  id: String(payment.get("id") || ""),
+                  status: String(payment.get("status") || ""),
+                  method: String(payment.get("method") || ""),
+                  amount: Number(payment.get("amount") || 0),
+                  currency: String(payment.get("currency") || ""),
+                  paidAt: payment.get("paidAt") || null,
+                }
               : null,
             driver: driver
               ? {
-                id: String(driver.get("id") || ""),
-                name: String(driver.get("name") || ""),
-                phone: String(driver.get("phone") || ""),
-                rating: Number(driver.get("rating") || 0),
-                photoUrl: String(driver.get("avatarUrl") || ""),
-              }
+                  id: String(driver.get("id") || ""),
+                  name: String(driver.get("name") || ""),
+                  phone: String(driver.get("phone") || ""),
+                  rating: Number(driver.get("rating") || 0),
+                  photoUrl: String(driver.get("avatarUrl") || ""),
+                }
               : null,
           };
         } catch (enrichmentError) {
@@ -1456,13 +1488,34 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
     const availableDrivers = await User.findAll({ where: { role: 'livreur', isActive: true, isAvailable: true }, raw: true });
     if (!availableDrivers.length) return res.status(404).json({ success: false });
     const selected = availableDrivers[0] as any;
-    await Order.update({ driverId: selected.id, status: "ACCEPTED" }, { where: { id: orderId } });
-    await User.update({ isAvailable: false }, { where: { id: selected.id } });
 
     let vehicle = null;
+    let media = { driverPhotoUrl: "", vehiclePhotoUrl: "" };
     try {
-      vehicle = await DriverVehicle.findOne({ where: { driverId: selected.id }, raw: true });
+      const [vehicleResult, mediaResult] = await Promise.all([
+        DriverVehicle.findOne({
+          where: { driverId: selected.id },
+          order: [
+            ["isPrimary", "DESC"],
+            ["createdAt", "DESC"],
+          ],
+          raw: true,
+        }),
+        resolveDriverMedia({ driverId: String(selected.id || "").trim() }),
+      ]);
+      vehicle = vehicleResult;
+      media = mediaResult;
     } catch (e) { }
+
+    await Order.update(
+      {
+        driverId: selected.id,
+        driverVehicleId: vehicle?.id || null,
+        status: "ACCEPTED",
+      },
+      { where: { id: orderId } },
+    );
+    await User.update({ isAvailable: false }, { where: { id: selected.id } });
 
     return res.status(200).json({
       success: true,
@@ -1473,11 +1526,16 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
           phone: selected.phone,
           latitude: selected.latitude,
           longitude: selected.longitude,
-          photoUrl: selected.photoUrl,
+          photoUrl: media.driverPhotoUrl || selected.photoUrl || selected.avatarUrl || "",
           coursesCount: selected.deliveryCount || 0,
           fcmToken: selected.fcmToken,
         },
-        vehicle: vehicle || {},
+        vehicle: vehicle
+          ? {
+              ...((vehicle as unknown as Record<string, unknown>) || {}),
+              photoUrl: media.vehiclePhotoUrl || "",
+            }
+          : {},
         completionOtp: order.get('completionOtp')
       }
     });
@@ -1525,48 +1583,31 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Course déjà assignée ou annulée." });
     }
 
-    const order = await Order.findByPk(orderId);
-    if (!order) return res.status(404).json({ success: false });
-    console.log("[acceptDeliveryByDriver] order snapshot", {
-      orderId,
-      driverId,
-      deliveryPhone: String(order.get("deliveryPhone") || "").trim(),
-      completionOtp: String(order.get("completionOtp") || "").trim(),
-      parcelNature: String(
-        order.get("parcelNature") || order.get("packageDescription") || "",
-      ).trim(),
-    });
+      const order = await Order.findByPk(orderId);
+      if (!order) return res.status(404).json({ success: false });
+      console.log("[acceptDeliveryByDriver] order snapshot", {
+        orderId,
+        driverId,
+        deliveryPhone: String(order.get("deliveryPhone") || "").trim(),
+        completionOtp: String(order.get("completionOtp") || "").trim(),
+        parcelNature: String(
+          order.get("parcelNature") || order.get("packageDescription") || "",
+        ).trim(),
+      });
 
-    // await User.update({ isAvailable: false }, { where: { id: driverId } });
-    // const [driver, media] = await Promise.all([
-    //   User.findByPk(driverId, { raw: true }) as Promise<Record<string, unknown> | null>,
-    //   resolveDriverMedia({ driverId: String(driverId || "").trim() }),
-    // ]);
+      await User.update({ isAvailable: false }, { where: { id: driverId } });
+      const [driver, media] = await Promise.all([
+        User.findByPk(driverId, { raw: true }) as Promise<Record<string, unknown> | null>,
+        resolveDriverMedia({ driverId: String(driverId || "").trim() }),
+      ]);
+      if (!driver) return res.status(404).json({ success: false, message: "Livreur introuvable." });
+      await markOrderSearchAccepted(orderId, {
+        id: String(driver?.id || driverId || '').trim(),
+        name: String(driver?.name || '').trim(),
+        phone: String(driver?.phone || '').trim(),
+      });
 
-    // 1. Mise à jour du statut
-    await User.update({ isAvailable: false }, { where: { id: driverId } });
-
-    // 2. Récupération des données avec le bon typage
-    const [driverResult, media] = await Promise.all([
-      // On retire le "as Promise<...>" ici et on utilise .get() après
-      User.findByPk(driverId),
-      resolveDriverMedia({ driverId: String(driverId || "").trim() }),
-    ]);
-
-    // 3. Conversion sécurisée pour correspondre au type Record<string, unknown>
-    const driver = driverResult
-      ? (driverResult.get({ plain: true }) as Record<string, unknown>)
-      : null;
-
-
-    if (!driver) return res.status(404).json({ success: false, message: "Livreur introuvable." });
-    await markOrderSearchAccepted(orderId, {
-      id: String(driver?.id || driverId || '').trim(),
-      name: String(driver?.name || '').trim(),
-      phone: String(driver?.phone || '').trim(),
-    });
-
-    let vehicle = null;
+      let vehicle = null;
     try {
       vehicle = await DriverVehicle.findOne({ where: { driverId }, raw: true });
     } catch (e) { }
@@ -1684,24 +1725,24 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       });
     }
 
-    const status = String(order.status || "").trim();
-    const eta = await buildDeliveryEtaPayload({
-      orderId,
-      order,
+      const status = String(order.status || "").trim();
+      const eta = await buildDeliveryEtaPayload({
+        orderId,
+        order,
+        latitude: lat,
+        longitude: lng,
+      });
+      const payload = {
+        orderId,
+        driverId: normalizedDriverId,
+        userId: normalizedDriverId,
+        role: "livreur",
       latitude: lat,
-      longitude: lng,
-    });
-    const payload = {
-      orderId,
-      driverId: normalizedDriverId,
-      userId: normalizedDriverId,
-      role: "livreur",
-      latitude: lat,
-      longitude: lng,
-      status,
-      locationUpdatedAt: new Date().toISOString(),
-      eta,
-    };
+        longitude: lng,
+        status,
+        locationUpdatedAt: new Date().toISOString(),
+        eta,
+      };
 
     const io: Server = (req as any).io;
     io.to(`order_${orderId}`).emit("order:driver_location_updated", payload);
@@ -1715,22 +1756,22 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       payload,
     );
 
-    return res.status(200).json({ success: true, data: { eta } });
-  } catch (error) {
-    return res.status(500).json({ success: false });
-  }
-};
+      return res.status(200).json({ success: true, data: { eta } });
+    } catch (error) {
+      return res.status(500).json({ success: false });
+    }
+  };
 
 export const getDeliveryTracking = async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-    const trackingData = await buildTrackingDataForOrder(orderId);
-    if (!trackingData) {
-      return res.status(404).json({ success: false, message: "Course introuvable" });
-    }
-    return res.status(200).json({ success: true, data: trackingData });
-  } catch (error) { return res.status(500).json({ success: false }); }
-};
+    try {
+      const { orderId } = req.params;
+      const trackingData = await buildTrackingDataForOrder(orderId);
+      if (!trackingData) {
+        return res.status(404).json({ success: false, message: "Course introuvable" });
+      }
+      return res.status(200).json({ success: true, data: trackingData });
+    } catch (error) { return res.status(500).json({ success: false }); }
+  };
 
 export const estimateCancellation = async (req: Request, res: Response) => {
   try {

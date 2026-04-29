@@ -197,8 +197,8 @@ export const getRoute = async (req: Request, res: Response) => {
             success: true,
             polyline: polyline,
             distance: response.data.routes[0].legs.reduce((acc: any, leg: any) => acc + leg.distance.value, 0), // Somme des distances
-            // distance: distance,
-            // duration: duration
+            distanceText: distance,
+            durationText: duration
         });
 
     } catch (error: unknown) { // On explicite le type unknown
