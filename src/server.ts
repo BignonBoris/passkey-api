@@ -1640,14 +1640,14 @@ async function ensureDefaultAppSettings() {
 }
 
 
-// async function resetDatabase() {
-//   try {
-//     // ATTENTION : force: true supprime toutes les données !
-//     await sequelize.sync({ force: true });
-//     console.log("✅ Base de données réinitialisée et tables recréées !");
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la réinitialisation :", error);
-//   }
-// }
+async function resetDatabase() {
+  try {
+    // ATTENTION : force: true supprime toutes les données !
+    await sequelize.sync({ force: true });
+    console.log("✅ Base de données réinitialisée et tables recréées !");
+  } catch (error) {
+    console.error("❌ Erreur lors de la réinitialisation :", error);
+  }
+}
 
-// resetDatabase();
+resetDatabase();
