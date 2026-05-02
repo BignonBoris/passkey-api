@@ -7,6 +7,12 @@ class Incident extends Model {
   public id!: string;
   public orderId?: string | null;
   public driverId?: string | null;
+  public reporterRole!: string;
+  public description?: string | null;
+  public resolutionNotes?: string | null;
+  public latitude?: number | null;
+  public longitude?: number | null;
+  public evidenceJson?: string | null;
   public type!: string;
   public priority!: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   public status!: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
@@ -30,9 +36,34 @@ Incident.init(
       allowNull: true,
       references: { model: User, key: "id" },
     },
+    reporterRole: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "DRIVER",
+    },
     type: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    resolutionNotes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    latitude: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    longitude: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    evidenceJson: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
     },
     priority: {
       type: DataTypes.ENUM("LOW", "MEDIUM", "HIGH", "CRITICAL"),

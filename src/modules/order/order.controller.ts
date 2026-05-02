@@ -63,6 +63,7 @@ const DELIVERY_TRACKING_STATUSES = [
 
 const ETA_CACHE_TTL_MS = 8000;
 const PAYMENT_PROMPT_WINDOW_MS = 3 * 60 * 1000;
+const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/+$/, "");
 
 type DeliveryEtaPayload = {
   remainingSeconds: number;
@@ -81,6 +82,49 @@ type DeliveryEtaCacheEntry = {
 };
 
 const deliveryEtaCache = new Map<string, DeliveryEtaCacheEntry>();
+
+function isPrivateHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) return false;
+  if (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "0.0.0.0"
+  ) {
+    return true;
+  }
+  if (normalized.startsWith("10.") || normalized.startsWith("192.168.")) {
+    return true;
+  }
+  const private172 = /^172\.(1[6-9]|2\d|3[0-1])\./;
+  return private172.test(normalized);
+}
+
+function normalizePublicMediaUrl(rawValue: unknown): string {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+
+  if (APP_BASE_URL) {
+    if (raw.startsWith("/uploads/")) {
+      return `${APP_BASE_URL}${raw}`;
+    }
+
+    if (raw.startsWith("uploads/")) {
+      return `${APP_BASE_URL}/${raw}`;
+    }
+
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.startsWith("/uploads/") && isPrivateHost(parsed.hostname)) {
+        return `${APP_BASE_URL}${parsed.pathname}${parsed.search}`;
+      }
+    } catch (_) {
+      // Keep the original value when it's not a URL and not a known uploads path.
+    }
+  }
+
+  return raw;
+}
 
 function generateCompletionOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -163,8 +207,8 @@ async function resolveDriverMedia(params: {
     ).trim();
 
   return {
-    driverPhotoUrl: pickDocumentUrl("ID_PHOTO"),
-    vehiclePhotoUrl: pickDocumentUrl("VEHICLE_IMAGE"),
+    driverPhotoUrl: normalizePublicMediaUrl(pickDocumentUrl("ID_PHOTO")),
+    vehiclePhotoUrl: normalizePublicMediaUrl(pickDocumentUrl("VEHICLE_IMAGE")),
   };
 }
 
@@ -197,7 +241,10 @@ async function buildTrackingDataForOrder(orderId: string) {
     driver = driverResult
       ? ({
         ...(driverResult as unknown as Record<string, unknown>),
-        photoUrl: media.driverPhotoUrl || (driverResult as any).avatarUrl || "",
+        photoUrl:
+          media.driverPhotoUrl ||
+          normalizePublicMediaUrl((driverResult as any).avatarUrl) ||
+          "",
       } as Record<string, unknown>)
       : null;
     vehicle = vehicleResult
@@ -1135,7 +1182,7 @@ export const getOrders = async (req: Request, res: Response) => {
                 name: String(driver.get("name") || ""),
                 phone: String(driver.get("phone") || ""),
                 rating: Number(driver.get("rating") || 0),
-                photoUrl: String(driver.get("avatarUrl") || ""),
+                photoUrl: normalizePublicMediaUrl(String(driver.get("avatarUrl") || "")),
               }
               : null,
           };
@@ -1554,7 +1601,11 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
           latitude: selected.latitude,
           longitude: selected.longitude,
           rating: Number(selected.rating || 0),
-          photoUrl: media.driverPhotoUrl || selected.photoUrl || selected.avatarUrl || "",
+          photoUrl:
+            media.driverPhotoUrl ||
+            normalizePublicMediaUrl(selected.photoUrl) ||
+            normalizePublicMediaUrl(selected.avatarUrl) ||
+            "",
           coursesCount: selected.deliveryCount || 0,
           fcmToken: selected.fcmToken,
         },
@@ -1664,7 +1715,9 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
         latitude: driver.latitude,
         longitude: driver.longitude,
         rating: Number(driver.rating || 0),
-        photoUrl: media.driverPhotoUrl || String(driver.avatarUrl || ""),
+        photoUrl:
+          media.driverPhotoUrl ||
+          normalizePublicMediaUrl(String(driver.avatarUrl || "")),
         coursesCount: Number(driver.deliveryCount || 0),
         fcmToken: driver.fcmToken,
       },

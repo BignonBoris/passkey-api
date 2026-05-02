@@ -3,6 +3,8 @@ import {
   listIncidents,
   getIncident,
   createIncident,
+  reportCashUnpaidIncident,
+  reportDriverIncident,
   updateIncident,
   deleteIncident,
 } from "./incidents.controller";
@@ -57,6 +59,8 @@ const router = express.Router();
  */
 router.get("/", authenticate, authorize(PRIVILEGED_ROLES), listIncidents);
 router.post("/", authenticate, authorize(PRIVILEGED_ROLES), createIncident);
+router.post("/driver-report", authenticate, reportDriverIncident);
+router.post("/cash-unpaid", authenticate, reportCashUnpaidIncident);
 
 /**
  * @swagger

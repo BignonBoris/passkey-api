@@ -77,6 +77,7 @@ async function startServer() {
     await ensureOrderRatingColumns();
     await ensureOrderSearchStatsColumns();
     await ensureUserRefreshTokenColumn();
+    await ensureIncidentSchema();
     await ensureFoodOrderColumns();
     await ensurePricingRulesTable();
     await ensurePaymentSchema();
@@ -509,6 +510,48 @@ async function ensureUserRefreshTokenColumn() {
     }
   } catch (err) {
     console.warn("[migration] ensureUserRefreshTokenColumn skipped:", err);
+  }
+}
+
+async function ensureIncidentSchema() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "Incident";
+  try {
+    const columns = await queryInterface.describeTable(tableName);
+    const addColumn = async (name: string, definition: any) => {
+      if (!columns[name]) {
+        await queryInterface.addColumn(tableName, name, definition);
+        console.log(`[migration] Added ${name} to ${tableName}`);
+      }
+    };
+
+    await addColumn("reporterRole", {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "DRIVER",
+    });
+    await addColumn("description", {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    });
+    await addColumn("resolutionNotes", {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    });
+    await addColumn("latitude", {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    });
+    await addColumn("longitude", {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    });
+    await addColumn("evidenceJson", {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
+    });
+  } catch (err) {
+    console.warn("[migration] ensureIncidentSchema skipped:", err);
   }
 }
 
