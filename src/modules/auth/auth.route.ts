@@ -1,6 +1,7 @@
 import { Router } from "express";
 import loginRoutes from "./login/login.routes";
 import verifyOtpRoutes from "./verify-otp/verifyOtp.routes";
+import refreshTokenRoutes from "./refresh-token/refreshToken.routes";
 import {
   adminSignUp,
   adminSignIn,
@@ -17,6 +18,7 @@ const router = Router();
 
 router.use("/login", loginRoutes);
 router.use("/verify-otp", verifyOtpRoutes);
+router.use("/refresh-token", refreshTokenRoutes);
 router.post("/check-phone", checkPhone);
 router.post("/resend-otp", resendOtp);
 router.post("/sign-in", signIn);

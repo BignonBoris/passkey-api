@@ -1,16 +1,22 @@
 import jwt from "jsonwebtoken";
-import { JWT_SECRET, JWT_EXPIRES_IN } from "../../../config/jwt";
+import {
+  JWT_SECRET,
+  JWT_EXPIRES_IN,
+  JWT_REFRESH_SECRET,
+  JWT_REFRESH_EXPIRES_IN,
+} from "../../../config/jwt";
 import { UserRepository } from "../../../repositories/user.repository";
 import User from "../../../models/user.model";
 import { nomalizeCustomerPhone } from "../../../utils/phoneNormalize";
 
 export class VerifyOtpService {
   static async verifyOTP(phone: string, role: string, otp: string) {
-
     const normalizedPhone = await nomalizeCustomerPhone(phone);
     console.log(normalizedPhone, role, otp);
+
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     console.log(user);
+
     if (!user) {
       return {
         success: false,
@@ -37,38 +43,39 @@ export class VerifyOtpService {
       return {
         success: false,
         status: 400,
-        message: "Le code OTP a expirÃ©.",
+        message: "Le code OTP a expire.",
       };
     }
 
-    // Only activate automatically for non-courier roles. 
-    // Couriers are activated manually by admin after validation.
-    const updateData: any = { otpCode: null, otpExpiresAt: null };
+    const canAccessCourier = user.identityVerified;
+    const token = jwt.sign(
+      { id: user.id, role: user.role, canAccessCourier },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN },
+    );
+
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      JWT_REFRESH_SECRET,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN },
+    );
+
+    const updateData: Record<string, unknown> = {
+      otpCode: null,
+      otpExpiresAt: null,
+      refreshToken,
+    };
     if (user.role !== "livreur") {
       updateData.isActive = true;
     }
 
     await User.update(updateData, { where: { id: user.id } });
 
-    // const updatedUser = await UserRepository.updateUser(user);
+    const userPayload: Record<string, unknown> =
+      user instanceof User
+        ? (user.get({ plain: true }) as Record<string, unknown>)
+        : (user as unknown as Record<string, unknown>);
 
-    // UserRepository.updateUser likely returns [affectedCount, updatedUser] or similar,
-    // so fetch the fresh user record to access id and role after update. 
-
-    if (!user) {
-      throw new Error("Utilisateur introuvable après la mise à jour.");
-    }
-
-    const canAccessCourier = user.identityVerified;
-
-    const token = jwt.sign(
-      { id: user.id, role: user.role, canAccessCourier },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
-
-
-    return { ...user, token };
+    return { ...userPayload, token, refreshToken };
   }
-
 }

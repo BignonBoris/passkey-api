@@ -76,6 +76,7 @@ async function startServer() {
     await ensureReturnOrderColumns();
     await ensureOrderRatingColumns();
     await ensureOrderSearchStatsColumns();
+    await ensureUserRefreshTokenColumn();
     await ensureFoodOrderColumns();
     await ensurePricingRulesTable();
     await ensurePaymentSchema();
@@ -491,6 +492,23 @@ async function ensureRiderColumnsExist() {
         });
       }
     }
+  }
+}
+
+async function ensureUserRefreshTokenColumn() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableName = "User";
+  try {
+    const columns = await queryInterface.describeTable(tableName);
+    if (!columns["refreshToken"]) {
+      await queryInterface.addColumn(tableName, "refreshToken", {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      });
+      console.log("[migration] Added refreshToken to User");
+    }
+  } catch (err) {
+    console.warn("[migration] ensureUserRefreshTokenColumn skipped:", err);
   }
 }
 
@@ -1546,6 +1564,25 @@ function getSettingsEntryIcon(entry: unknown) {
   return String((entry as Record<string, unknown>).icon ?? "").trim();
 }
 
+const DEFAULT_PARCEL_NATURE_OPTIONS = [
+  "Documents",
+  "Repas",
+  "Vetements",
+  "Chaussures",
+  "Medicaments",
+  "Produits cosmetiques",
+  "Appareil electronique",
+  "Accessoires electroniques",
+  "Pieces de rechange",
+  "Courses / provisions",
+  "Articles de bureau",
+  "Cadeau",
+  "Fleurs",
+  "Livre / cahiers",
+  "Colis fragile",
+  "Autre",
+];
+
 async function ensureDefaultAppSettings() {
   const defaultSettings: Array<{
     section: "contact" | "about" | "operations";
@@ -1581,6 +1618,7 @@ async function ensureDefaultAppSettings() {
         content: {
           deliveryDistanceKm: "10",
           driverLocationDistanceKm: "2",
+          parcelNatureOptions: JSON.stringify(DEFAULT_PARCEL_NATURE_OPTIONS),
         },
       },
     ];

@@ -19,6 +19,7 @@ class User extends Model {
   public city?: string | null;
   public dateOfBirth?: Date | null;
   public avatarUrl?: string | null;
+  public refreshToken?: string | null;
   public countryId!: string;
   public accountStatus!: 'active' | 'suspended';
   public suspensionReason?: string | null;
@@ -184,6 +185,10 @@ User.init({
   },
   avatarUrl: {
     type: DataTypes.STRING,
+    allowNull: true,
+  },
+  refreshToken: {
+    type: DataTypes.TEXT,
     allowNull: true,
   },
   countryId: {

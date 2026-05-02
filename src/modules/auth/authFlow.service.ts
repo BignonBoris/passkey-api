@@ -3,7 +3,7 @@ import User from "../../models/user.model";
 import { generateOTP } from "../../utils/otp";
 import { UserRepository } from "../../repositories/user.repository";
 import jwt from "jsonwebtoken";
-import { JWT_EXPIRES_IN, JWT_SECRET } from "../../config/jwt";
+import { JWT_EXPIRES_IN, JWT_SECRET, JWT_REFRESH_SECRET, JWT_REFRESH_EXPIRES_IN } from "../../config/jwt";
 import { SmsService } from "../../services/sms/sms.service";
 import { nomalizeCustomerPhone } from "../../utils/phoneNormalize";
 
@@ -247,12 +247,19 @@ export class AuthFlowService {
       expiresIn: JWT_EXPIRES_IN,
     });
 
+    const refreshToken = jwt.sign({ id: user.id }, JWT_REFRESH_SECRET, {
+      expiresIn: JWT_REFRESH_EXPIRES_IN,
+    });
+
+    await User.update({ refreshToken }, { where: { id: user.id } });
+
     return {
       success: true,
       status: 200,
       message: user.role === "restaurant" ? "Restaurant authentication successful" : "Admin authentication successful",
       data: {
         token,
+        refreshToken,
         user: {
           id: user.id,
           role: user.role,

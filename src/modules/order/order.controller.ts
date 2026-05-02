@@ -146,8 +146,20 @@ async function resolveDriverMedia(params: {
 
   const pickDocumentUrl = (type: string) =>
     String(
-      documents.find((doc: any) => String(doc.type || "").trim().toUpperCase() == type)
-        ?.url || "",
+      documents
+        .filter(
+          (doc: any) =>
+            String(doc.type || "").trim().toUpperCase() === type &&
+            String(doc.url || "").trim() !== "",
+        )
+        .sort((a: any, b: any) => {
+          const aApproved = String(a.status || "").trim().toUpperCase() === "APPROVED" ? 1 : 0;
+          const bApproved = String(b.status || "").trim().toUpperCase() === "APPROVED" ? 1 : 0;
+          if (aApproved !== bApproved) return bApproved - aApproved;
+          const aTime = new Date(String(a.updatedAt || a.createdAt || 0)).getTime();
+          const bTime = new Date(String(b.updatedAt || b.createdAt || 0)).getTime();
+          return bTime - aTime;
+        })[0]?.url || "",
     ).trim();
 
   return {
@@ -490,6 +502,19 @@ function resolveParcelNature(input: Record<string, unknown>): string {
   ).trim();
 }
 
+function resolvePackageDescription(
+  input: Record<string, unknown>,
+  fallbackParcelNature = "",
+): string {
+  return String(
+    input.packageDescription ??
+    input.parcelNature ??
+    input.packageNature ??
+    fallbackParcelNature ??
+    "",
+  ).trim();
+}
+
 function resolvePackageSize(input: Record<string, unknown>): string {
   return String(
     input.packageSize ??
@@ -745,6 +770,7 @@ export const createOrder = async (req: Request, res: Response) => {
     const { userId, pickupLocation, destinationLocation, pickupAddress, destinationAddress, vehicleId, distance, durationMinutes, extras, tip, pickupTimestamp, simulationMode } = req.body;
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
     const parcelNature = resolveParcelNature(req.body || {});
+    const packageDescription = resolvePackageDescription(req.body || {}, parcelNature);
     const packageSize = resolvePackageSize(req.body || {});
     const packageWeight = resolvePackageWeight(req.body || {});
     const deliveryPhone = await normalizeOrderPhoneIfPossible(
@@ -771,7 +797,7 @@ export const createOrder = async (req: Request, res: Response) => {
       searchStartedAt: new Date(),
       pricingSnapshotJson: JSON.stringify(pricing.snapshot),
       parcelNature,
-      packageDescription: parcelNature,
+      packageDescription: packageDescription || parcelNature,
       packageSize: packageSize || null,
       packageWeight: packageWeight || null,
     });
@@ -1460,6 +1486,7 @@ export const createDeliveryRequest = async (req: Request, res: Response) => {
     const { userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, distance, vehicleType } = req.body;
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
     const parcelNature = resolveParcelNature(req.body || {});
+    const packageDescription = resolvePackageDescription(req.body || {}, parcelNature);
     const packageSize = resolvePackageSize(req.body || {});
     const packageWeight = resolvePackageWeight(req.body || {});
     const deliveryPhone = await normalizeOrderPhoneIfPossible(
@@ -1467,7 +1494,7 @@ export const createDeliveryRequest = async (req: Request, res: Response) => {
     );
     const countryId = await resolveCountryId("");
     const pricing = await calculateDeliveryPricing({ vehicleType, countryId, distanceKm: extractDistanceKm(distance), durationMinutes: 0, extras: 0, tip: 0 });
-    const newOrder = await Order.create({ publicCode: await generateUniqueOrderPublicCode("CRS"), countryId, userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, price: pricing.price, distance: String(distance || ""), status: "PENDING", vehicleType, completionOtp: generateCompletionOtp(), deliveryPhone, parcelNature, packageDescription: parcelNature, packageSize: packageSize || null, packageWeight: packageWeight || null });
+    const newOrder = await Order.create({ publicCode: await generateUniqueOrderPublicCode("CRS"), countryId, userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, price: pricing.price, distance: String(distance || ""), status: "PENDING", vehicleType, completionOtp: generateCompletionOtp(), deliveryPhone, parcelNature, packageDescription: packageDescription || parcelNature, packageSize: packageSize || null, packageWeight: packageWeight || null });
     const paymentRow = await Payment.create({ orderId: newOrder.get('id'), userId, amount: pricing.price, status: "PENDING", method: paymentMethod });
     await sendCompletionOtpSmsIfPossible({
       phone: deliveryPhone,
@@ -1526,6 +1553,7 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
           phone: selected.phone,
           latitude: selected.latitude,
           longitude: selected.longitude,
+          rating: Number(selected.rating || 0),
           photoUrl: media.driverPhotoUrl || selected.photoUrl || selected.avatarUrl || "",
           coursesCount: selected.deliveryCount || 0,
           fcmToken: selected.fcmToken,
@@ -1604,6 +1632,11 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       ? (driverResult.get({ plain: true }) as Record<string, unknown>)
       : null;
 
+    // await User.update({ isAvailable: false }, { where: { id: driverId } });
+    // const [driver, media] = await Promise.all([
+    //   User.findByPk(driverId, { raw: true }) as Promise<Record<string, unknown> | null>,
+    //   resolveDriverMedia({ driverId: String(driverId || "").trim() }),
+    // ]);
     if (!driver) return res.status(404).json({ success: false, message: "Livreur introuvable." });
     await markOrderSearchAccepted(orderId, {
       id: String(driver?.id || driverId || '').trim(),
@@ -1630,6 +1663,7 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
         phone: driver.phone,
         latitude: driver.latitude,
         longitude: driver.longitude,
+        rating: Number(driver.rating || 0),
         photoUrl: media.driverPhotoUrl || String(driver.avatarUrl || ""),
         coursesCount: Number(driver.deliveryCount || 0),
         fcmToken: driver.fcmToken,
