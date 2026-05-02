@@ -1499,8 +1499,8 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
 async function seedVehicleTypes() {
   const defaults = [
     { code: "moto", name: "Moto", iconKey: "two_wheeler_rounded", sortOrder: 1, isActive: true },
-    // { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
-    // { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
+    { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
+    { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
   ];
 
   for (const item of defaults) {
@@ -1678,14 +1678,14 @@ async function ensureDefaultAppSettings() {
 }
 
 
-// async function resetDatabase() {
-//   try {
-//     // ATTENTION : force: true supprime toutes les données !
-//     await sequelize.sync({ force: true });
-//     console.log("✅ Base de données réinitialisée et tables recréées !");
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la réinitialisation :", error);
-//   }
-// }
+async function resetDatabase() {
+  try {
+    // ATTENTION : force: true supprime toutes les données !
+    await sequelize.sync({ force: true });
+    console.log("✅ Base de données réinitialisée et tables recréées !");
+  } catch (error) {
+    console.error("❌ Erreur lors de la réinitialisation :", error);
+  }
+}
 
-// resetDatabase();
+resetDatabase();
