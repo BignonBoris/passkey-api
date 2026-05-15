@@ -87,7 +87,7 @@ async function startServer() {
     await ensureFoodCatalogSchema();
     await seedVehicleTypes();
     await ensureDefaultAppSettings();
-    // await seedDefaultAdmin();
+    await seedDefaultAdmin();
     await seedFoodHomeData();
     server.listen(PORT, () => {
       console.log(`API running on http://localhost:${PORT}`);
@@ -1571,7 +1571,6 @@ async function seedVehicleTypes() {
   }
 }
 
-/*
 async function seedDefaultAdmin() {
   const email = "admin@admin.com";
   const password = "password";
@@ -1595,7 +1594,7 @@ async function seedDefaultAdmin() {
 
   console.log("Default admin created:", email);
 }
-*/
+
 
 function getSettingsEntryValue(entry: unknown) {
   if (entry && typeof entry === "object" && !Array.isArray(entry)) {
