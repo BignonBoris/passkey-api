@@ -64,7 +64,7 @@ const router = express.Router();
  *       201:
  *         description: Commande créée
  */
-router.post('/', createOrder);
+router.post('/', authenticate, createOrder);
 
 /**
  * @swagger
@@ -93,7 +93,7 @@ router.post('/', createOrder);
  *             schema:
  *               $ref: "#/components/schemas/OrderListResponse"
  */
-router.get('/', getOrders);
+router.get('/', authenticate, getOrders);
 
 /**
  * @swagger
@@ -120,7 +120,7 @@ router.get('/', getOrders);
  *       200:
  *         description: Statut mis à jour
  */
-router.put('/:orderId/status', updateOrderStatus);
+router.put('/:orderId/status', authenticate, updateOrderStatus);
 
 /**
  * @swagger
@@ -237,7 +237,7 @@ router.post('/bulk-delete', authenticate, authorize(PRIVILEGED_ROLES), bulkDelet
  *       201:
  *         description: Demande de livraison créée
  */
-router.post('/deliveries', createDeliveryRequest);
+router.post('/deliveries', authenticate, createDeliveryRequest);
 
 /**
  * @swagger
@@ -254,7 +254,7 @@ router.post('/deliveries', createDeliveryRequest);
  *       200:
  *         description: Livreur assigné
  */
-router.post('/deliveries/:orderId/assign-nearest', assignNearestDriver);
+router.post('/deliveries/:orderId/assign-nearest', authenticate, assignNearestDriver);
 
 /**
  * @swagger
@@ -271,7 +271,7 @@ router.post('/deliveries/:orderId/assign-nearest', assignNearestDriver);
  *       200:
  *         description: Livraison acceptée
  */
-router.post('/deliveries/:orderId/accept', acceptDeliveryByDriver);
+router.post('/deliveries/:orderId/accept', authenticate, acceptDeliveryByDriver);
 
 /**
  * @swagger
@@ -288,7 +288,7 @@ router.post('/deliveries/:orderId/accept', acceptDeliveryByDriver);
  *       200:
  *         description: Statut mis à jour
  */
-router.post('/deliveries/:orderId/driver-arrived-pickup', driverArrivedPickup);
+router.post('/deliveries/:orderId/driver-arrived-pickup', authenticate, driverArrivedPickup);
 
 /**
  * @swagger
@@ -305,7 +305,7 @@ router.post('/deliveries/:orderId/driver-arrived-pickup', driverArrivedPickup);
  *       200:
  *         description: Statut mis à jour, frais d'attente calculés
  */
-router.post('/deliveries/:orderId/driver-left-pickup', driverLeftPickup);
+router.post('/deliveries/:orderId/driver-left-pickup', authenticate, driverLeftPickup);
 
 /**
  * @swagger
@@ -329,7 +329,7 @@ router.post('/deliveries/:orderId/driver-left-pickup', driverLeftPickup);
  *       200:
  *         description: Livraison annulée
  */
-router.post('/deliveries/:orderId/cancel', cancelDelivery);
+router.post('/deliveries/:orderId/cancel', authenticate, cancelDelivery);
 
 /**
  * @swagger
@@ -346,9 +346,9 @@ router.post('/deliveries/:orderId/cancel', cancelDelivery);
  *       200:
  *         description: Estimation des frais
  */
-router.get('/deliveries/:orderId/cancellation-estimate', estimateCancellation);
-router.get('/deliveries/:orderId/cancel-after-pickup-quote', estimateCancelAfterPickup);
-router.post('/deliveries/:orderId/cancel-after-pickup-confirm', confirmCancelAfterPickupFlow);
+router.get('/deliveries/:orderId/cancellation-estimate', authenticate, estimateCancellation);
+router.get('/deliveries/:orderId/cancel-after-pickup-quote', authenticate, estimateCancelAfterPickup);
+router.post('/deliveries/:orderId/cancel-after-pickup-confirm', authenticate, confirmCancelAfterPickupFlow);
 
 /**
  * @swagger
@@ -365,7 +365,7 @@ router.post('/deliveries/:orderId/cancel-after-pickup-confirm', confirmCancelAft
  *       200:
  *         description: Statut mis à jour
  */
-router.patch('/deliveries/:orderId/status', updateDeliveryStatus);
+router.patch('/deliveries/:orderId/status', authenticate, updateDeliveryStatus);
 
 /**
  * @swagger
@@ -382,8 +382,8 @@ router.patch('/deliveries/:orderId/status', updateDeliveryStatus);
  *       200:
  *         description: Position mise à jour
  */
-router.patch('/deliveries/:orderId/driver-location', updateDriverLocationForDelivery);
-router.patch('/deliveries/:orderId/driver-location/live', broadcastDriverLocationForDelivery);
+router.patch('/deliveries/:orderId/driver-location', authenticate, updateDriverLocationForDelivery);
+router.patch('/deliveries/:orderId/driver-location/live', authenticate, broadcastDriverLocationForDelivery);
 
 /**
  * @swagger
@@ -400,6 +400,6 @@ router.patch('/deliveries/:orderId/driver-location/live', broadcastDriverLocatio
  *       200:
  *         description: Détails de tracking retournés
  */
-router.get('/deliveries/:orderId/tracking', getDeliveryTracking);
+router.get('/deliveries/:orderId/tracking', authenticate, getDeliveryTracking);
 
 export default router;

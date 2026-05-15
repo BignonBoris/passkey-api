@@ -145,7 +145,7 @@ export async function createChatMessage(params: {
   return { conversation, message };
 }
 
-export async function listConversationsForUser(userId: string) {
+export async function listConversationsForUser(userId: string, limit: number = 20, offset: number = 0) {
   const conversations = await ChatConversation.findAll({
     where: {
       [Op.or]: [{ userId }, { driverId: userId }],
@@ -163,6 +163,8 @@ export async function listConversationsForUser(userId: string) {
       },
     ],
     order: [["lastMessageAt", "DESC"], ["updatedAt", "DESC"]],
+    limit: Math.min(Math.max(limit, 1), 100),
+    offset: Math.max(offset, 0),
   });
 
   const serialized = await Promise.all(

@@ -22,10 +22,7 @@ export class LoginService {
         }
       }
     } else {
-      const hashedPassword = password ? await bcrypt.hash(password, 10) : undefined;
-
-      user = await User.create({ phone: normalizedPhone, password: hashedPassword, role });
-
+      return { success: false, status: 404, message: "Compte inexistant. Veuillez vous inscrire." };
     }
 
     const otp = generateOTP();

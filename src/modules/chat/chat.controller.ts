@@ -39,8 +39,10 @@ export async function getConversations(req: AuthenticatedRequest, res: Response)
   try {
     const userId = ensureUser(req, res);
     if (!userId) return;
+    const limit = parseInt(String(req.query.limit || "20"));
+    const offset = parseInt(String(req.query.offset || "0"));
 
-    const conversations = await listConversationsForUser(userId);
+    const conversations = await listConversationsForUser(userId, limit, offset);
     return res.status(200).json({ success: true, data: conversations });
   } catch (error: any) {
     return res.status(500).json({

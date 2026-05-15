@@ -87,7 +87,7 @@ async function startServer() {
     await ensureFoodCatalogSchema();
     await seedVehicleTypes();
     await ensureDefaultAppSettings();
-    await seedDefaultAdmin();
+    // await seedDefaultAdmin();
     await seedFoodHomeData();
     server.listen(PORT, () => {
       console.log(`API running on http://localhost:${PORT}`);
@@ -1542,8 +1542,8 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
 async function seedVehicleTypes() {
   const defaults = [
     { code: "moto", name: "Moto", iconKey: "two_wheeler_rounded", sortOrder: 1, isActive: true },
-    { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
-    { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
+    // { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
+    // { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
   ];
 
   for (const item of defaults) {
@@ -1571,6 +1571,7 @@ async function seedVehicleTypes() {
   }
 }
 
+/*
 async function seedDefaultAdmin() {
   const email = "admin@admin.com";
   const password = "password";
@@ -1594,6 +1595,7 @@ async function seedDefaultAdmin() {
 
   console.log("Default admin created:", email);
 }
+*/
 
 function getSettingsEntryValue(entry: unknown) {
   if (entry && typeof entry === "object" && !Array.isArray(entry)) {

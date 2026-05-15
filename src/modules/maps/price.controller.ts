@@ -4,6 +4,7 @@ import VehicleType from '../../models/vehicle-type.model';
 import { getRouteDetails } from './maps.service';
 import { resolveCountryFromCoordinates } from '../../services/country.service';
 import { calculateDeliveryPricing } from '../../services/pricing.service';
+import { parseCoordinate } from './shared/maps-helpers';
 
 const VEHICLE_SPEED_FACTORS: Record<string, number> = {
   moto: 0.8,
@@ -29,11 +30,19 @@ function toVehicleLabel(vehicleType: string) {
 
 export const calculateTrip = async (req: Request, res: Response) => {
   const { pickup, delivery } = req.body;
-  const resolvedCountry = await resolveCountryFromCoordinates(Number(pickup?.lat), Number(pickup?.lng));
+  const pickupCoordinate = parseCoordinate(pickup);
+  const resolvedCountry = await resolveCountryFromCoordinates(
+    pickupCoordinate?.lat ?? NaN,
+    pickupCoordinate?.lng ?? NaN,
+  );
   const countryId = String(resolvedCountry.country.get("id") || "");
 
   const routeData = await getRouteDetails(pickup, delivery);
   if (!routeData) {
+    console.error('[MAPS_CALCULATE_TRIP][ROUTE_FAILED]', {
+      pickup,
+      delivery,
+    });
     return res.status(400).json({ message: "Impossible de calculer l'itineraire" });
   }
 

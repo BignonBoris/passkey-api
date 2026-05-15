@@ -588,6 +588,14 @@ export const updateUserLocation = async (
       });
     }
 
+    // Security check: only allow self-update or admin-update
+    if (req.user?.role !== "admin" && req.user?.id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Vous ne pouvez mettre à jour que votre propre position.",
+      });
+    }
+
     const user = await UserRepository.findById(userId);
     if (!user) {
       return res.status(404).json({

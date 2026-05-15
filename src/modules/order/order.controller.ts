@@ -64,6 +64,12 @@ const DELIVERY_TRACKING_STATUSES = [
 const ETA_CACHE_TTL_MS = 8000;
 const PAYMENT_PROMPT_WINDOW_MS = 3 * 60 * 1000;
 const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/+$/, "");
+const SIMULATE_DRIVER_FOUND =
+  String(process.env.SIMULATE_DRIVER_FOUND || "false").trim().toLowerCase() === "true";
+const SIMULATE_DRIVER_FOUND_DELAY_MS = Math.max(
+  1000,
+  Number(process.env.SIMULATE_DRIVER_FOUND_DELAY_MS || 6000) || 6000,
+);
 
 type DeliveryEtaPayload = {
   remainingSeconds: number;
@@ -247,12 +253,11 @@ async function buildTrackingDataForOrder(orderId: string) {
           "",
       } as Record<string, unknown>)
       : null;
-    vehicle = vehicleResult
-      ? ({
-        ...(vehicleResult as unknown as Record<string, unknown>),
-        photoUrl: media.vehiclePhotoUrl || "",
-      } as Record<string, unknown>)
-      : null;
+    vehicle = buildDriverVehiclePayload(
+      (vehicleResult as unknown as Record<string, unknown> | null) || null,
+      media.vehiclePhotoUrl || "",
+      String(order.vehicleType || "").trim()
+    );
   }
 
   const { paymentMethod, paymentStatus } = await getOrderPaymentSnapshot(orderId);
@@ -280,6 +285,26 @@ async function buildTrackingDataForOrder(orderId: string) {
     driver,
     vehicle,
     eta,
+  };
+}
+
+function buildDriverVehiclePayload(
+  vehicle: Record<string, unknown> | null | undefined,
+  mediaVehiclePhotoUrl: string,
+  fallbackType?: string | null
+) {
+  const normalizedType =
+    String(vehicle?.type || fallbackType || "").trim();
+
+  return {
+    ...((vehicle as Record<string, unknown> | undefined) || {}),
+    type: normalizedType,
+    name: normalizedType,
+    brand: String(vehicle?.brand || "").trim(),
+    model: String(vehicle?.model || "").trim(),
+    plateNumber: String(vehicle?.plateNumber || "").trim(),
+    year: vehicle?.year ?? null,
+    photoUrl: mediaVehiclePhotoUrl || "",
   };
 }
 
@@ -649,6 +674,192 @@ async function getDriverSearchRadiusKm(): Promise<number> {
   }
 }
 
+function shouldSimulateDriverFound() {
+  return SIMULATE_DRIVER_FOUND && String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production";
+}
+
+async function findSimulatedDriverCandidate() {
+  return User.findOne({
+    where: {
+      role: "livreur",
+      isActive: true,
+      identityVerified: true,
+      accountStatus: "active",
+    },
+    order: [["isAvailable", "DESC"], ["createdAt", "ASC"]],
+  });
+}
+
+async function acceptOrderWithDriver(params: {
+  orderId: string;
+  driverId: string;
+  io: Server;
+}) {
+  const orderId = String(params.orderId || "").trim();
+  const driverId = String(params.driverId || "").trim();
+  if (!orderId || !driverId) {
+    return { success: false, message: "orderId et driverId sont requis." };
+  }
+
+  const paymentSnapshot = await getOrderPaymentSnapshot(orderId);
+  const paymentMethod = String(paymentSnapshot.paymentMethod || "CASH")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  const paymentStatus = String(paymentSnapshot.paymentStatus || "PENDING")
+    .trim()
+    .toUpperCase();
+  const shouldAwaitRemotePayment =
+    ["MOBILE_MONEY", "CARD"].includes(paymentMethod) &&
+    paymentStatus !== "PAID";
+  const paymentPromptDeadlineAt = shouldAwaitRemotePayment
+    ? new Date(Date.now() + PAYMENT_PROMPT_WINDOW_MS)
+    : null;
+  let activeVehicle: Record<string, unknown> | null = null;
+  try {
+    activeVehicle = await DriverVehicle.findOne({
+      where: { driverId },
+      order: [["isPrimary", "DESC"], ["createdAt", "DESC"]],
+      raw: true,
+    }) as Record<string, unknown> | null;
+  } catch (e) {}
+  const driverVehicleId = String(activeVehicle?.id || "").trim() || null;
+
+  const [affectedCount] = await Order.update(
+    {
+      driverId,
+      driverVehicleId,
+      status: "ACCEPTED",
+      paymentPromptDeadlineAt,
+      paymentCheckoutStartedAt: null,
+      paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
+      paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+    },
+    { where: { id: orderId, status: "PENDING" } }
+  );
+
+  if (affectedCount === 0) {
+    return { success: false, message: "Course deja assignee ou annulee." };
+  }
+
+  const order = await Order.findByPk(orderId);
+  if (!order) return { success: false, message: "Course introuvable." };
+
+  await User.update({ isAvailable: false }, { where: { id: driverId } });
+  const [driverResult, media] = await Promise.all([
+    User.findByPk(driverId),
+    resolveDriverMedia({ driverId, driverVehicleId }),
+  ]);
+  const driver = driverResult
+    ? (driverResult.get({ plain: true }) as Record<string, unknown>)
+    : null;
+
+  if (!driver) return { success: false, message: "Livreur introuvable." };
+  await markOrderSearchAccepted(orderId, {
+    id: String(driver?.id || driverId || "").trim(),
+    name: String(driver?.name || "").trim(),
+    phone: String(driver?.phone || "").trim(),
+  });
+
+  const vehicle = activeVehicle;
+
+  const userId = order.get("userId");
+
+  params.io.to(`user_${userId}`).emit("order_status_changed", {
+    orderId,
+    publicCode: String(order.get("publicCode") || ""),
+    status: "ACCEPTED",
+    driverId,
+    driver: {
+      id: driver.id,
+      name: driver.name,
+      phone: driver.phone,
+      latitude: driver.latitude,
+      longitude: driver.longitude,
+      rating: Number(driver.rating || 0),
+      photoUrl:
+        media.driverPhotoUrl ||
+        normalizePublicMediaUrl(String(driver.avatarUrl || "")),
+      coursesCount: Number(driver.deliveryCount || 0),
+      fcmToken: driver.fcmToken,
+    },
+    vehicle: buildDriverVehiclePayload(
+      (vehicle as unknown as Record<string, unknown> | undefined) || null,
+      media.vehiclePhotoUrl || "",
+      String(order.get("vehicleType") || "").trim()
+    ),
+    completionOtp: order.get("completionOtp"),
+    payment_method: paymentMethod,
+    payment_status: paymentStatus,
+    paymentPromptDeadlineAt,
+    paymentCheckoutStartedAt: null,
+    paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
+    paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+  });
+
+  params.io.to(`user_${driverId}`).emit("order_status_changed", {
+    orderId,
+    publicCode: String(order.get("publicCode") || ""),
+    status: "ACCEPTED",
+    payment_method: paymentMethod,
+    payment_status: paymentStatus,
+    paymentPromptDeadlineAt,
+    paymentCheckoutStartedAt: null,
+    paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
+    paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+  });
+
+  params.io.to("drivers").emit("CANCEL_INCOMING_CALL", {
+    orderId,
+    requestId: orderId,
+    acceptedByDriverId: driverId,
+  });
+
+  await notifyUserDeliveryStep(order, {
+    title: "Livreur trouve",
+    body: "Votre chauffeur a accepte la course et se dirige vers vous.",
+    type: "DRIVER_ACCEPTED",
+    route: "/app",
+  });
+
+  try {
+    const smsPayload = {
+      phone: String(order.get("deliveryPhone") || "").trim(),
+      otp: String(order.get("completionOtp") || "").trim(),
+      parcelNature: String(
+        order.get("parcelNature") || order.get("packageDescription") || "",
+      ).trim(),
+    };
+    await sendAcceptedOrderOtpSmsIfPossible(smsPayload);
+  } catch (smsError) {
+    console.error("acceptOrderWithDriver OTP SMS failed", smsError);
+  }
+
+  return { success: true };
+}
+
+function scheduleSimulatedDriverFound(params: {
+  orderId: string;
+  driverId: string;
+  io: Server;
+}) {
+  setTimeout(async () => {
+    try {
+      const order = await Order.findByPk(params.orderId);
+      if (!order) return;
+      const currentStatus = String(order.get("status") || "").trim().toUpperCase();
+      if (currentStatus !== "PENDING") return;
+
+      const result = await acceptOrderWithDriver(params);
+      if (!result.success) {
+        console.warn("[simulate-driver-found] acceptance skipped:", result.message);
+      }
+    } catch (error) {
+      console.error("[simulate-driver-found] failed", error);
+    }
+  }, SIMULATE_DRIVER_FOUND_DELAY_MS);
+}
+
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -738,6 +949,47 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   console.log(` - Point de ramassage: ${order.get('pickupLocation')} (${order.get('pickupAddress')})`);
   console.log(` - Rayon de recherche configuré: ${radiusKm} km`);
 
+  if (shouldSimulateDriverFound()) {
+    const simulatedDriver = await findSimulatedDriverCandidate();
+    if (simulatedDriver) {
+      const driverId = String(simulatedDriver.get("id") || "").trim();
+      const snapshot: SearchDriverSnapshot = {
+        id: driverId,
+        name: String(simulatedDriver.get("name") || "Livreur").trim(),
+        phone: String(simulatedDriver.get("phone") || "").trim(),
+      };
+      await beginOrderSearchAttempt(String(order.get("id") || ""), [snapshot]);
+
+      const latitude =
+        simulatedDriver.get("latitude") != null
+          ? Number(simulatedDriver.get("latitude"))
+          : Number((pickup.lat + 0.002).toFixed(6));
+      const longitude =
+        simulatedDriver.get("longitude") != null
+          ? Number(simulatedDriver.get("longitude"))
+          : Number((pickup.lng + 0.002).toFixed(6));
+
+      scheduleSimulatedDriverFound({
+        orderId: String(order.get("id") || "").trim(),
+        driverId,
+        io,
+      });
+
+      return {
+        radiusKm,
+        notifiedDrivers: [
+          {
+            id: driverId,
+            name: snapshot.name,
+            phone: snapshot.phone,
+            latitude,
+            longitude,
+          },
+        ],
+      };
+    }
+  }
+
   const drivers = await User.findAll({
     where: {
       role: 'livreur',
@@ -813,6 +1065,7 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
 }
 
 export const createOrder = async (req: Request, res: Response) => {
+  console.log('[DEBUG] createOrder');
   try {
     const { userId, pickupLocation, destinationLocation, pickupAddress, destinationAddress, vehicleId, distance, durationMinutes, extras, tip, pickupTimestamp, simulationMode } = req.body;
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
@@ -1125,11 +1378,20 @@ export const adminCancelDelivery = async (req: AuthenticatedRequest, res: Respon
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
-    const { userId, driverId, status, includeArchived, archived } = req.query;
+    const { userId, driverId, status, vehicleType, startDate, endDate, includeArchived, archived, page, limit } = req.query;
     const where: any = {};
     if (userId) where.userId = userId;
     if (driverId) where.driverId = driverId;
     if (status) where.status = status;
+    if (vehicleType) where.vehicleType = vehicleType;
+
+    if (startDate || endDate) {
+      const dateRange: any = {};
+      if (startDate) dateRange[Op.gte] = new Date(String(startDate));
+      if (endDate) dateRange[Op.lte] = new Date(String(endDate));
+      where.createdAt = dateRange;
+    }
+
     const includeArchivedFlag =
       String(includeArchived || "").trim().toLowerCase() === "true" ||
       String(archived || "").trim().toLowerCase() === "all";
@@ -1137,10 +1399,16 @@ export const getOrders = async (req: Request, res: Response) => {
       where.isArchived = false;
     }
 
-    const orders = await Order.findAll({
+    const pageNumber = Math.max(1, parseInt(String(page || "1")));
+    const limitNumber = Math.max(1, parseInt(String(limit || "10")));
+    const offset = (pageNumber - 1) * limitNumber;
+
+    const { count, rows: orders } = await Order.findAndCountAll({
       where,
       order: [["createdAt", "DESC"]],
-      include: [{ model: Country, as: "country", attributes: ["name"] }]
+      include: [{ model: Country, as: "country", attributes: ["name"] }],
+      limit: limitNumber,
+      offset: offset,
     });
 
     const enrichedOrders = await Promise.all(
@@ -1193,7 +1461,16 @@ export const getOrders = async (req: Request, res: Response) => {
       })
     );
 
-    return res.status(200).json(enrichedOrders);
+    return res.status(200).json({
+      success: true,
+      data: enrichedOrders,
+      pagination: {
+        total: count,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: Math.ceil(count / limitNumber),
+      }
+    });
   } catch (error) { return res.status(500).json({ error: "Failed" }); }
 };
 
@@ -1609,12 +1886,11 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
           coursesCount: selected.deliveryCount || 0,
           fcmToken: selected.fcmToken,
         },
-        vehicle: vehicle
-          ? {
-            ...((vehicle as unknown as Record<string, unknown>) || {}),
-            photoUrl: media.vehiclePhotoUrl || "",
-          }
-          : {},
+        vehicle: buildDriverVehiclePayload(
+          (vehicle as unknown as Record<string, unknown> | undefined) || null,
+          media.vehiclePhotoUrl || "",
+          String(order.get('vehicleType') || '').trim()
+        ),
         completionOtp: order.get('completionOtp')
       }
     });
@@ -1625,6 +1901,14 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
     const { driverId } = req.body;
+    const ioServer: Server = (req as any).io;
+    const helperResult = await acceptOrderWithDriver({ orderId, driverId, io: ioServer });
+    if (!helperResult.success) {
+      return res.status(400).json({ success: false, message: helperResult.message });
+    }
+    return res.status(200).json({ success: true });
+    /*
+
     console.log("[acceptDeliveryByDriver] request", {
       url: req.originalUrl,
       params: req.params,
@@ -1721,10 +2005,11 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
         coursesCount: Number(driver.deliveryCount || 0),
         fcmToken: driver.fcmToken,
       },
-      vehicle: {
-        ...((vehicle as unknown as Record<string, unknown> | undefined) || {}),
-        photoUrl: media.vehiclePhotoUrl || "",
-      },
+      vehicle: buildDriverVehiclePayload(
+        (vehicle as unknown as Record<string, unknown> | undefined) || null,
+        media.vehiclePhotoUrl || "",
+        String(order.get("vehicleType") || "").trim()
+      ),
       completionOtp: order.get('completionOtp'),
       payment_method: paymentMethod,
       payment_status: paymentStatus,
@@ -1775,6 +2060,7 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
     const responsePayload = { success: true };
     console.log("[acceptDeliveryByDriver] response", responsePayload);
     return res.status(200).json(responsePayload);
+    */
   } catch (error) { return res.status(500).json({ success: false }); }
 };
 
