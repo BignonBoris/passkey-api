@@ -29,6 +29,7 @@ class User extends Model {
   public reactivatedBy?: string | null;
   public identityVerified!: boolean;
   public hasSubmittedOnboarding!: boolean;
+  public kycRejectionReason?: string | null;
   public otpCode?: string | null;
   public otpExpiresAt?: Date | null;
   public rating!: number;
@@ -116,6 +117,10 @@ User.init({
     type: DataTypes.BOOLEAN,
     defaultValue: false,
     allowNull: false,
+  },
+  kycRejectionReason: {
+    type: DataTypes.STRING,
+    allowNull: true,
   },
   otpCode: {
     type: DataTypes.STRING(6),

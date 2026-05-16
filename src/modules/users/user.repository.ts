@@ -82,8 +82,9 @@ export class UserRepository {
   static async updateIdentityVerified(params: {
     userId: string;
     identityVerified: boolean;
+    rejectionReason?: string | null;
   }) {
-    const { userId, identityVerified } = params;
+    const { userId, identityVerified, rejectionReason } = params;
     const user = await User.findByPk(userId);
     if (!user) {
       return null;
@@ -93,7 +94,13 @@ export class UserRepository {
     const isAccountActive = String(user.get("accountStatus") || "active") === "active";
     const updateData: Record<string, unknown> = {
       identityVerified,
+      kycRejectionReason: identityVerified ? null : (rejectionReason || null),
     };
+
+    if (isDriver && !identityVerified && rejectionReason) {
+      // If rejected, we allow resubmission
+      updateData.hasSubmittedOnboarding = false;
+    }
 
     if (isDriver && identityVerified && isAccountActive) {
       updateData.isActive = true;

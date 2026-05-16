@@ -1510,16 +1510,35 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
   const normalizedCode = String(code ?? "").trim().toLowerCase();
   if (!normalizedCode) return;
 
+  let baseFare = 0, perKmRate = 0, perMinuteRate = 0, minimumFare = 0;
+  if (normalizedCode === 'moto') {
+    baseFare = 500; perKmRate = 100; perMinuteRate = 15; minimumFare = 500;
+  } else if (normalizedCode === 'tricycle') {
+    baseFare = 1000; perKmRate = 150; perMinuteRate = 20; minimumFare = 1000;
+  } else if (normalizedCode === 'voiture') {
+    baseFare = 1500; perKmRate = 250; perMinuteRate = 30; minimumFare = 1500;
+  } else {
+    baseFare = 500; perKmRate = 100; perMinuteRate = 15; minimumFare = 500;
+  }
+
   const pricing = await VehiclePricingConfig.findOne({ where: { vehicleType: normalizedCode, countryId } });
   if (!pricing) {
     await VehiclePricingConfig.create({
       countryId,
       vehicleType: normalizedCode,
-      baseFare: 0,
-      perKmRate: 0,
-      perMinuteRate: 0,
+      baseFare,
+      perKmRate,
+      perMinuteRate,
       bookingFee: 0,
-      minimumFare: 0,
+      minimumFare,
+    });
+  } else if (pricing.get('baseFare') === 0 && pricing.get('perKmRate') === 0) {
+    await pricing.update({
+      baseFare,
+      perKmRate,
+      perMinuteRate,
+      bookingFee: 0,
+      minimumFare,
     });
   }
 
@@ -1542,8 +1561,8 @@ async function ensureVehicleTypeConfig(code: string, countryId: string = DEFAULT
 async function seedVehicleTypes() {
   const defaults = [
     { code: "moto", name: "Moto", iconKey: "two_wheeler_rounded", sortOrder: 1, isActive: true },
-    // { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
-    // { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
+    { code: "tricycle", name: "Tricycle", iconKey: "electric_rickshaw_rounded", sortOrder: 2, isActive: true },
+    { code: "voiture", name: "Voiture", iconKey: "directions_car_filled_rounded", sortOrder: 3, isActive: true },
   ];
 
   for (const item of defaults) {

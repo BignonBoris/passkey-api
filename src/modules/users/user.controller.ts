@@ -446,6 +446,7 @@ export const updateIdentityVerified = async (
   try {
     const userId = req.params.id;
     const identityVerified = req.body?.identityVerified;
+    const rejectionReason = req.body?.rejectionReason;
 
     if (typeof identityVerified !== "boolean") {
       return res.status(400).json({
@@ -467,6 +468,7 @@ export const updateIdentityVerified = async (
     const updatedUser = await UserRepository.updateIdentityVerified({
       userId,
       identityVerified,
+      rejectionReason,
     });
 
     if (!updatedUser) {
@@ -487,7 +489,7 @@ export const updateIdentityVerified = async (
       after: safeUser,
     });
 
-    // Notifier le livreur en temps rÃ©el quand son dossier est validÃ©
+    // Notifier le livreur en temps réel quand son dossier est validé ou rejeté
     if (targetRole === "livreur" && io) {
       io.to("drivers").emit("driver:profile_updated", safeUser);
       io.to("drivers").emit("driver:verification_updated", {
@@ -504,6 +506,7 @@ export const updateIdentityVerified = async (
       });
     }
 
+    // Cas de validation réussie
     if (identityVerified === true && targetRole === "livreur") {
       const verificationMessage =
         "Votre verification a ete effectuee. Votre dossier est complet et vous etes eligible pour exercer l'activite.";
@@ -541,13 +544,7 @@ export const updateIdentityVerified = async (
           {
             room: `user_${userId}`,
             event: "driver:verification_completed",
-            payload: {
-              type: "DRIVER_VERIFICATION_APPROVED",
-              title: "Verification du dossier",
-              message:
-                "Votre dossier est complet. Vous etes eligible pour l'activite livreur.",
-              userId,
-            },
+            payload,
           }
         );
       }
@@ -556,6 +553,57 @@ export const updateIdentityVerified = async (
       if (targetPhone) {
         sendSmsNotification(targetPhone, verificationMessage).catch((error) => {
           console.error("Driver verification SMS failed:", error);
+        });
+      }
+    }
+
+    // Cas de rejet (rejet global du dossier)
+    if (identityVerified === false && rejectionReason && targetRole === "livreur") {
+      const rejectionMessage = `Votre dossier a été refusé. Motif : ${rejectionReason}. Veuillez corriger vos informations.`;
+      const payload = {
+        type: "DRIVER_VERIFICATION_REJECTED",
+        title: "Dossier refusé",
+        message: rejectionMessage,
+        rejectionReason,
+        userId,
+        createdAt: new Date().toISOString(),
+      };
+
+      if (io) {
+        io.to(`user_${userId}`).emit("driver:verification_rejected", payload);
+      }
+
+      const targetUser = await User.findByPk(userId, {
+        attributes: ["fcmToken"],
+        raw: true,
+      });
+      const token = String((targetUser as any)?.fcmToken || "").trim();
+      if (token && token !== "undefined" && token !== "null") {
+        await sendPushNotification(
+          token,
+          "Dossier refusé",
+          rejectionMessage,
+          {
+            type: "DRIVER_VERIFICATION_REJECTED",
+            route: "/onboarding",
+            userId,
+            title: "Dossier refusé",
+            message: rejectionMessage,
+            rejectionReason,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            room: `user_${userId}`,
+            event: "driver:verification_rejected",
+            payload,
+          }
+        );
+      }
+
+      const targetPhone = String(user.getDataValue("phone") || "").trim();
+      if (targetPhone) {
+        sendSmsNotification(targetPhone, rejectionMessage).catch((error) => {
+          console.error("Driver rejection SMS failed:", error);
         });
       }
     }

@@ -9,6 +9,7 @@ import {
   listMyDriverVehicleTypes,
   submitMyDriverOnboarding,
   updateMyDriverOnboarding,
+  reviewDriverDocument,
 } from "./driver-documents.controller";
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
@@ -247,6 +248,35 @@ router.get("/:id", authenticate, authorize(PRIVILEGED_ROLES), getDriverDocument)
  *         description: Document mis à jour
  */
 router.patch("/:id", authenticate, authorize(PRIVILEGED_ROLES), updateDriverDocument);
+
+/**
+ * @swagger
+ * /driver-documents/{id}/review:
+ *   post:
+ *     summary: Approuver ou refuser un document et notifier le livreur (Admin only)
+ *     tags: [DriverDocuments]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [APPROVED, REJECTED] }
+ *               rejectionReason: { type: string, description: "Obligatoire si status=REJECTED" }
+ *     responses:
+ *       200:
+ *         description: Document validé / refusé avec notification envoyée
+ */
+router.post("/:id/review", authenticate, authorize(PRIVILEGED_ROLES), reviewDriverDocument);
 
 /**
  * @swagger

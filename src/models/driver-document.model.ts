@@ -8,6 +8,7 @@ class DriverDocument extends Model {
   public type!: string;
   public status!: "PENDING" | "APPROVED" | "REJECTED";
   public url?: string | null;
+  public rejectionReason?: string | null;
   public expiresAt?: Date | null;
   public verifiedAt?: Date | null;
   public verifiedBy?: string | null;
@@ -36,6 +37,10 @@ DriverDocument.init(
     },
     url: {
       type: DataTypes.STRING,
+      allowNull: true,
+    },
+    rejectionReason: {
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     expiresAt: {

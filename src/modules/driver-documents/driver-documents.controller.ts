@@ -8,6 +8,7 @@ import VehicleType from "../../models/vehicle-type.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { resolveCountryId } from "../../services/country.service";
 import { SmsService } from "../../services/sms/sms.service";
+import { sendPushNotification } from "../../services/notification.service";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",
@@ -100,7 +101,7 @@ export async function createDriverDocument(req: Request, res: Response) {
 
 export async function updateDriverDocument(req: Request, res: Response) {
   try {
-    const { status, url, expiresAt, verifiedBy } = req.body || {};
+    const { status, url, expiresAt, verifiedBy, rejectionReason } = req.body || {};
     const row = await DriverDocument.findByPk(req.params.id);
     if (!row) return res.status(404).json({ success: false, message: "Document livreur introuvable." });
 
@@ -110,10 +111,87 @@ export async function updateDriverDocument(req: Request, res: Response) {
     if (verifiedBy) row.set("verifiedBy", verifiedBy);
     if (status && status !== "PENDING") row.set("verifiedAt", new Date());
 
+    // Store rejection reason when rejecting
+    if (status === "REJECTED" && rejectionReason) {
+      row.set("rejectionReason", rejectionReason.toString().trim());
+    } else if (status === "APPROVED") {
+      row.set("rejectionReason", null);
+    }
+
     await row.save();
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Impossible de mettre à jour le document du livreur." });
+  }
+}
+
+/**
+ * Admin review endpoint: approve or reject a document and notify the driver.
+ */
+export async function reviewDriverDocument(req: AuthenticatedRequest, res: Response) {
+  try {
+    const { status, rejectionReason } = req.body || {};
+
+    if (!status || !["APPROVED", "REJECTED"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Le statut doit être APPROVED ou REJECTED." });
+    }
+    if (status === "REJECTED" && (!rejectionReason || !rejectionReason.toString().trim())) {
+      return res.status(400).json({ success: false, message: "Une raison de refus est obligatoire." });
+    }
+
+    const doc = await DriverDocument.findByPk(req.params.id);
+    if (!doc) return res.status(404).json({ success: false, message: "Document livreur introuvable." });
+
+    // Update document status
+    doc.set("status", status);
+    doc.set("verifiedAt", new Date());
+    doc.set("verifiedBy", req.user?.id || null);
+    doc.set("rejectionReason", status === "REJECTED" ? rejectionReason.toString().trim() : null);
+    await doc.save();
+
+    // Fetch driver to send notification
+    const driver = await User.findByPk(String(doc.get("userId")));
+    if (driver) {
+      const fcmToken = String(driver.get("fcmToken") || "").trim();
+      const docType = String(doc.get("type") || "");
+      const docTypeLabels: Record<string, string> = {
+        ID_CARD: "Carte d'identité",
+        DRIVER_LICENSE: "Permis de conduire",
+        ID_PHOTO: "Photo d'identité",
+        VEHICLE_IMAGE: "Photo du véhicule",
+        VEHICLE_REGISTRATION: "Carte grise",
+        VEHICLE_INSURANCE: "Assurance du véhicule",
+      };
+      const docLabel = docTypeLabels[docType] || docType;
+
+      if (status === "APPROVED") {
+        const title = "Document approuvé ✅";
+        const body = `Votre document "${docLabel}" a été approuvé par notre équipe.`;
+        if (fcmToken) {
+          await sendPushNotification(fcmToken, title, body, { type: "document_approved", documentId: String(doc.get("id")), docType }).catch(console.error);
+        }
+      } else {
+        const reason = rejectionReason.toString().trim();
+        const title = "Document refusé ❌";
+        const body = `Votre document "${docLabel}" a été refusé. Raison : ${reason}`;
+        if (fcmToken) {
+          await sendPushNotification(fcmToken, title, body, { type: "document_rejected", documentId: String(doc.get("id")), docType, rejectionReason: reason }).catch(console.error);
+        }
+        // Also send SMS as fallback
+        const phone = String(driver.get("phone") || "").trim();
+        if (phone) {
+          SmsService.sendSms(phone, `PassKey : Votre document "${docLabel}" a ete refuse. Raison : ${reason}. Veuillez le soumettre a nouveau.`).catch(console.error);
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: status === "APPROVED" ? "Document approuvé avec succès." : "Document refusé. Le livreur a été notifié.",
+      data: doc,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error?.message || "Impossible de traiter la revue du document." });
   }
 }
 
@@ -142,6 +220,7 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
         "role",
         "identityVerified",
         "hasSubmittedOnboarding",
+        "kycRejectionReason",
         "city",
         "dateOfBirth",
         "accountStatus",
@@ -170,13 +249,15 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
         type,
         status: row?.status || "MISSING",
         url: row?.url || null,
+        rejectionReason: row?.rejectionReason || null,
         updatedAt: row?.updatedAt || null,
       };
     });
 
     const hasAllDocuments = documents.every((d) => d.status !== "MISSING");
     const allApproved = documents.every((d) => d.status === "APPROVED");
-    const hasRejected = documents.some((d) => d.status === "REJECTED");
+    const kycRejectionReason = user.get("kycRejectionReason");
+    const hasRejected = documents.some((d) => d.status === "REJECTED") || Boolean(kycRejectionReason);
     const hasPending = documents.some((d) => d.status === "PENDING");
     const hasSubmittedOnboarding = Boolean(user.get("hasSubmittedOnboarding"));
     const identityVerified = Boolean(user.get("identityVerified"));
@@ -216,6 +297,7 @@ export async function getMyDriverOnboardingStatus(req: AuthenticatedRequest, res
       success: true,
       data: {
         identityVerified,
+        kycRejectionReason: kycRejectionReason || null,
         accountStatus: String(user.get("accountStatus") || "active"),
         isActive: Boolean(user.get("isActive")),
         isAvailable: Boolean(user.get("isAvailable")),
