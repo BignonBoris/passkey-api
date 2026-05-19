@@ -132,7 +132,8 @@ export const recoverPassword = catchAsync(
     const result = await AuthFlowService.recoverPassword(
       body.phone,
       body.otp,
-      body.newPassword
+      body.newPassword,
+      body.role
     );
 
     if (!result.success) {

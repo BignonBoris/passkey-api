@@ -223,8 +223,8 @@ export class AuthFlowService {
     };
   }
 
-  static async recoverPassword(phone: string, otp: string, newPassword: string) {
-    const normalizedPhone = await nomalizeCustomerPhone(phone);
+  static async recoverPassword(phone: string, otp: string, newPassword: string, role: string, countryCode: string = 'BJ') {
+    const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
     if (normalizedPhone === "INVALID_PHONE") {
       return { success: false, status: 400, message: "Numéro de téléphone invalide." };
     }

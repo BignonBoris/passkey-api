@@ -31,6 +31,7 @@ export const recoverPasswordSchema = z.object({
   phone: z.string().min(8),
   otp: z.string().length(6),
   newPassword: z.string().min(6),
+  role: z.string().default("usager"),
 });
 
 export const adminSignInSchema = z.object({
