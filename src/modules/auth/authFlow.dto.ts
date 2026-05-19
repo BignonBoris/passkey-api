@@ -22,6 +22,11 @@ export const forgotPasswordSchema = z.object({
   role: z.string().default("usager"),
 });
 
+export const validateRecoveryOtpSchema = z.object({
+  phone: z.string().min(8),
+  otp: z.string().length(6),
+});
+
 export const recoverPasswordSchema = z.object({
   phone: z.string().min(8),
   otp: z.string().length(6),

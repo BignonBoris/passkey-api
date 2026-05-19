@@ -68,7 +68,7 @@ export class SmsService {
    * @param otp Code OTP généré
    */
   public static async sendOtp(phone: string, otp: string): Promise<boolean> {
-    const message = `Votre code de validation PassKey est : ${otp}. Ce code est confidentiel, ne le partagez avec personne.`;
+    const message = `<#> PassKey: ${otp} est votre code de validation. Il expire dans 5 minutes. Ne le partagez avec personne.`;
     return await this.sendSms(phone, message);
   }
 }

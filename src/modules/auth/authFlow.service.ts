@@ -195,8 +195,41 @@ export class AuthFlowService {
     };
   }
 
+  static async validateRecoveryOtp(phone: string, otp: string, countryCode: string = 'BJ') {
+    const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
+    if (normalizedPhone === "INVALID_PHONE") {
+      return { success: false, status: 400, message: "Numéro de téléphone invalide." };
+    }
+
+    const user = await UserRepository.findByPhone(normalizedPhone);
+    if (!user) {
+      return { success: false, status: 404, message: "Utilisateur introuvable" };
+    }
+
+    const now = new Date();
+    if (
+      !user.otpCode ||
+      user.otpCode !== otp ||
+      !user.otpExpiresAt ||
+      user.otpExpiresAt < now
+    ) {
+      return { success: false, status: 400, message: "Le code OTP est invalide ou expiré." };
+    }
+
+    return {
+      success: true,
+      status: 200,
+      message: "Code OTP valide",
+    };
+  }
+
   static async recoverPassword(phone: string, otp: string, newPassword: string) {
-    const user = await UserRepository.findByPhone(phone);
+    const normalizedPhone = await nomalizeCustomerPhone(phone);
+    if (normalizedPhone === "INVALID_PHONE") {
+      return { success: false, status: 400, message: "Numéro de téléphone invalide." };
+    }
+
+    const user = await UserRepository.findByPhone(normalizedPhone);
     if (!user) {
       return { success: false, status: 404, message: "Utilisateur introuvable" };
     }

@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import KycRequest from "../../models/kyc-request.model";
 import User from "../../models/user.model";
 import { sendPushNotification, sendSmsNotification } from "../../services/notification.service";
+import { UserRepository } from "../users/user.repository";
 
 export async function listKycRequests(req: Request, res: Response) {
   try {
@@ -82,13 +83,11 @@ export async function updateKycRequest(req: Request, res: Response) {
     if (status === "APPROVED" || status === "REJECTED") {
       const userId = row.get("userId");
       // 1. Update user verification status
-      await User.update(
-        { 
-          identityVerified: status === "APPROVED",
-          kycRejectionReason: status === "REJECTED" ? reason : null
-        },
-        { where: { id: userId } }
-      );
+      await UserRepository.updateIdentityVerified({
+        userId: String(userId),
+        identityVerified: status === "APPROVED",
+        rejectionReason: status === "REJECTED" ? reason : null,
+      });
 
       // 2. Sync all driver documents to the same status
       const DriverDocument = (await import("../../models/driver-document.model")).default;
@@ -105,6 +104,10 @@ export async function updateKycRequest(req: Request, res: Response) {
         
         // Socket.io real-time update
         if (io) {
+          const refreshedUser = await User.findByPk(userId);
+          const safeUser = refreshedUser ? refreshedUser.toJSON() : user.toJSON();
+          delete (safeUser as any).password;
+
           io.to(`user_${userId}`).emit("driver:verification_updated", {
             id: userId,
             identityVerified,
@@ -112,8 +115,6 @@ export async function updateKycRequest(req: Request, res: Response) {
           });
           
           // Re-emit general profile update to refresh UI lists if needed
-          const safeUser = user.toJSON();
-          delete (safeUser as any).password;
           io.to("drivers").emit("driver:profile_updated", safeUser);
         }
 
