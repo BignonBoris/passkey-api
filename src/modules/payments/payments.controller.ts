@@ -331,7 +331,7 @@ async function emitPaymentCheckoutRequested(
     await sendPushNotification(
       userToken,
       "Paiement en attente",
-      "Le livreur a declenche le paiement de votre course.",
+      "Veuillez finaliser le paiement pour lancer la recherche du livreur.",
       {
         type: "PAYMENT_CHECKOUT_REQUESTED",
         orderId: String(order.get("id") || ""),
