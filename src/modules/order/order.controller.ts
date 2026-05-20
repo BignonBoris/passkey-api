@@ -721,7 +721,7 @@ async function acceptOrderWithDriver(params: {
       where: { driverId },
       order: [["isPrimary", "DESC"], ["createdAt", "DESC"]],
       raw: true,
-    }) as Record<string, unknown> | null;
+    }) as unknown as Record<string, unknown> | null;
   } catch (e) {}
   const driverVehicleId = String(activeVehicle?.id || "").trim() || null;
 
