@@ -14,6 +14,13 @@ type AdminSignUpInput = {
   role: "admin" | "sous-admin" | "restaurant" | "usager" | "livreur";
 };
 
+class OtpDeliveryError extends Error {
+  constructor(message: string = "Echec de l'envoi du code OTP.") {
+    super(message);
+    this.name = "OtpDeliveryError";
+  }
+}
+
 async function saveOtp(phone: string, role: string = "usager") {
   const otp = generateOTP();
   const user = await UserRepository.findByPhoneAndRole(phone, role);
@@ -28,7 +35,12 @@ async function saveOtp(phone: string, role: string = "usager") {
   );
 
   // Appel automatique au service SMS (Twilio ou FasterMessage selon le .env)
-  await SmsService.sendOtp(phone, otp);
+  const smsSent = await SmsService.sendOtp(phone, otp);
+  if (!smsSent) {
+    throw new OtpDeliveryError(
+      "Le code OTP a ete genere, mais son envoi par SMS a echoue."
+    );
+  }
 
   return process.env.NODE_ENV === "development" ? otp : undefined;
 }
@@ -85,6 +97,9 @@ export class AuthFlowService {
 
   static async signIn(phone: string, role: string, password: string) {
     const normalizedPhone = await nomalizeCustomerPhone(phone);
+    if (normalizedPhone === "INVALID_PHONE") {
+      return { success: false, status: 400, message: "Numero de telephone invalide." };
+    }
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     if (!user) {
@@ -104,7 +119,15 @@ export class AuthFlowService {
       return { success: false, status: 401, message: "Mot de passe invalide" };
     }
 
-    const otp = await saveOtp(normalizedPhone, role);
+    let otp: string | undefined;
+    try {
+      otp = await saveOtp(normalizedPhone, role);
+    } catch (error) {
+      if (error instanceof OtpDeliveryError) {
+        return { success: false, status: 502, message: error.message };
+      }
+      throw error;
+    }
     return {
       success: true,
       status: 200,
@@ -116,6 +139,9 @@ export class AuthFlowService {
   // services/auth-flow.service.ts
   static async resendOtp(phone: string, role: string) {
     const normalizedPhone = await nomalizeCustomerPhone(phone);
+    if (normalizedPhone === "INVALID_PHONE") {
+      return { success: false, status: 400, message: "Numero de telephone invalide." };
+    }
     // 1. Trouver l'utilisateur par tÃ©lÃ©phone ET rÃ´le
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
@@ -137,7 +163,14 @@ export class AuthFlowService {
     );
 
     // 4. Envoi du SMS rÃ©el (Simulation ou Provider rÃ©el)
-    await SmsService.sendOtp(phone, newOtp);
+    const smsSent = await SmsService.sendOtp(normalizedPhone, newOtp);
+    if (!smsSent) {
+      return {
+        success: false,
+        status: 502,
+        message: "Le code OTP a ete regenere, mais son envoi par SMS a echoue.",
+      };
+    }
 
     return {
       success: true,
@@ -165,7 +198,15 @@ export class AuthFlowService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ phone: normalizedPhone, password: hashedPassword, role });
 
-    const otp = await saveOtp(normalizedPhone, role);
+    let otp: string | undefined;
+    try {
+      otp = await saveOtp(normalizedPhone, role);
+    } catch (error) {
+      if (error instanceof OtpDeliveryError) {
+        return { success: false, status: 502, message: error.message };
+      }
+      throw error;
+    }
     return {
       success: true,
       status: 201,
@@ -176,6 +217,9 @@ export class AuthFlowService {
 
   static async forgotPassword(phone: string, role: string, countryCode: string = 'BJ') {
     const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
+    if (normalizedPhone === "INVALID_PHONE") {
+      return { success: false, status: 400, message: "Numero de telephone invalide." };
+    }
     const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
 
     if (!user) {
@@ -186,7 +230,15 @@ export class AuthFlowService {
       return { success: false, status: 403, message: "Votre compte est bloque. Contactez le support." };
     }
 
-    const otp = await saveOtp(normalizedPhone, user.role);
+    let otp: string | undefined;
+    try {
+      otp = await saveOtp(normalizedPhone, user.role);
+    } catch (error) {
+      if (error instanceof OtpDeliveryError) {
+        return { success: false, status: 502, message: error.message };
+      }
+      throw error;
+    }
     return {
       success: true,
       status: 200,
@@ -195,13 +247,18 @@ export class AuthFlowService {
     };
   }
 
-  static async validateRecoveryOtp(phone: string, otp: string, countryCode: string = 'BJ') {
+  static async validateRecoveryOtp(
+    phone: string,
+    otp: string,
+    role: string = 'usager',
+    countryCode: string = 'BJ'
+  ) {
     const normalizedPhone = await nomalizeCustomerPhone(phone, countryCode);
     if (normalizedPhone === "INVALID_PHONE") {
       return { success: false, status: 400, message: "Numéro de téléphone invalide." };
     }
 
-    const user = await UserRepository.findByPhone(normalizedPhone);
+    const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     if (!user) {
       return { success: false, status: 404, message: "Utilisateur introuvable" };
     }
@@ -229,7 +286,7 @@ export class AuthFlowService {
       return { success: false, status: 400, message: "Numéro de téléphone invalide." };
     }
 
-    const user = await UserRepository.findByPhone(normalizedPhone);
+    const user = await UserRepository.findByPhoneAndRole(normalizedPhone, role);
     if (!user) {
       return { success: false, status: 404, message: "Utilisateur introuvable" };
     }

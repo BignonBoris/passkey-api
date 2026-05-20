@@ -109,7 +109,8 @@ export const validateRecoveryOtp = catchAsync(
     const body = validateRecoveryOtpSchema.parse(req.body);
     const result = await AuthFlowService.validateRecoveryOtp(
       body.phone,
-      body.otp
+      body.otp,
+      body.role
     );
 
     if (!result.success) {

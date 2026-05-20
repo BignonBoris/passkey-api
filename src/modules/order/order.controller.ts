@@ -721,7 +721,7 @@ async function acceptOrderWithDriver(params: {
       where: { driverId },
       order: [["isPrimary", "DESC"], ["createdAt", "DESC"]],
       raw: true,
-    }) as unknown as Record<string, unknown> | null;
+    }) as Record<string, unknown> | null;
   } catch (e) {}
   const driverVehicleId = String(activeVehicle?.id || "").trim() || null;
 
@@ -1064,6 +1064,20 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   };
 }
 
+export async function startDriverSearchForOrder(params: {
+  order: Order;
+  io: Server;
+  paymentRow: any;
+  pricing?: any;
+}) {
+  return notifyNearbyDrivers(
+    params.order,
+    params.io,
+    params.pricing ?? null,
+    params.paymentRow,
+  );
+}
+
 export const createOrder = async (req: Request, res: Response) => {
   console.log('[DEBUG] createOrder');
   try {
@@ -1110,14 +1124,15 @@ export const createOrder = async (req: Request, res: Response) => {
     const io: Server = (req as any).io;
     let notifiedDriversPayload: any[] = [];
     let searchRadiusKm: number | null = null;
-    if (!simulationMode) {
+    const shouldStartSearchImmediately = paymentMethod === "CASH";
+    if (!simulationMode && shouldStartSearchImmediately) {
       try {
-        const notifyResult = await notifyNearbyDrivers(
-          newOrder,
+        const notifyResult = await startDriverSearchForOrder({
+          order: newOrder,
           io,
           pricing,
           paymentRow,
-        );
+        });
         notifiedDriversPayload = notifyResult?.notifiedDrivers ?? [];
         searchRadiusKm =
           typeof notifyResult?.radiusKm === 'number' ? notifyResult.radiusKm : null;

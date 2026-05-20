@@ -25,6 +25,7 @@ import { calculateCourseRevenueSettlement } from "../../services/revenue.service
 import { applyDriverAccountMovement } from "../driver-funding/driver-funding.service";
 import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
 import { resolveCountryId } from "../../services/country.service";
+import { startDriverSearchForOrder } from "../order/order.controller";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
@@ -355,10 +356,33 @@ async function reconcileOrderAfterPaymentUpdate(
   const nextStatus = String(payment.get("status") || "").trim().toUpperCase();
 
   if (nextStatus === "PAID") {
+    const previousCheckoutStatus = String(
+      order.get("paymentCheckoutStatus") || "",
+    )
+      .trim()
+      .toUpperCase();
+    const shouldStartDeferredSearch =
+      isRemotePaymentMethod(payment.get("method")) &&
+      String(order.get("status") || "").trim().toUpperCase() === "PENDING" &&
+      !String(order.get("driverId") || "").trim() &&
+      previousCheckoutStatus !== "PAID";
+
     order.set("paymentPromptDeadlineAt", null);
     order.set("paymentCheckoutStartedAt", null);
     order.set("paymentCheckoutStatus", "PAID");
+    if (shouldStartDeferredSearch) {
+      order.set("searchStartedAt", new Date());
+    }
     await order.save();
+
+    if (shouldStartDeferredSearch) {
+      const io = (req as any).io;
+      await startDriverSearchForOrder({
+        order,
+        io,
+        paymentRow: payment,
+      });
+    }
     return;
   }
 
@@ -681,6 +705,11 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       message: string;
       autoPaid?: boolean;
     };
+    const previousOrderCheckoutStatus = String(
+      order.get("paymentCheckoutStatus") || "",
+    )
+      .trim()
+      .toUpperCase();
 
     if (paymentMethod === "MOBILE_MONEY") {
       if (!isFedaPayConfigured()) {
@@ -745,6 +774,21 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
         order.set("paymentCheckoutStatus", "PAID");
         await order.save();
         await payment.save();
+
+        const shouldStartDeferredSearch =
+          String(order.get("status") || "").trim().toUpperCase() ===
+            "PENDING" &&
+          !String(order.get("driverId") || "").trim() &&
+          previousOrderCheckoutStatus !== "PAID";
+        if (shouldStartDeferredSearch) {
+          order.set("searchStartedAt", new Date());
+          await order.save();
+          await startDriverSearchForOrder({
+            order,
+            io: (req as any).io,
+            paymentRow: payment,
+          });
+        }
 
         await notifyPaymentEvent(req, {
           payment,
