@@ -7,6 +7,7 @@ import {
   adminSignIn,
   checkPhone,
   forgotPassword,
+  logout,
   recoverPassword,
   validateRecoveryOtp,
   signIn,
@@ -28,6 +29,7 @@ router.post("/register", signUp);
 router.post("/password/forgot", forgotPassword);
 router.post("/password/verify-otp", validateRecoveryOtp);
 router.post("/password/recover", recoverPassword);
+router.post("/logout", authenticate, logout);
 router.post("/admin/sign-in", adminSignIn);
 router.post("/admin/sign-up", authenticate, authorize(["admin"]), adminSignUp);
 

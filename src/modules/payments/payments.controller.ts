@@ -26,6 +26,7 @@ import { applyDriverAccountMovement } from "../driver-funding/driver-funding.ser
 import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
 import { resolveCountryId } from "../../services/country.service";
 import { startDriverSearchForOrder } from "../order/order.controller";
+import { shouldStartDeferredSearchAfterPayment } from "../order/order-payment-flow.service";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
@@ -361,11 +362,12 @@ async function reconcileOrderAfterPaymentUpdate(
     )
       .trim()
       .toUpperCase();
-    const shouldStartDeferredSearch =
-      isRemotePaymentMethod(payment.get("method")) &&
-      String(order.get("status") || "").trim().toUpperCase() === "PENDING" &&
-      !String(order.get("driverId") || "").trim() &&
-      previousCheckoutStatus !== "PAID";
+    const shouldStartDeferredSearch = shouldStartDeferredSearchAfterPayment({
+      paymentMethod: payment.get("method"),
+      orderStatus: order.get("status"),
+      driverId: order.get("driverId"),
+      previousCheckoutStatus,
+    });
 
     order.set("paymentPromptDeadlineAt", null);
     order.set("paymentCheckoutStartedAt", null);
@@ -433,11 +435,78 @@ async function reconcileOrderAfterPaymentUpdate(
     return;
   }
 
-  order.set("paymentPromptDeadlineAt", new Date(Date.now() + 3 * 60 * 1000));
   order.set("paymentCheckoutStartedAt", null);
   order.set("paymentPromptAttemptCount", attemptCount + 1);
   order.set("paymentCheckoutStatus", "FAILED_RETRY_ALLOWED");
   await order.save();
+}
+
+async function cancelExpiredAcceptedOrderAfterCheckoutClose(
+  req: AuthenticatedRequest,
+  params: {
+    payment: Payment;
+    order: Order;
+  },
+) {
+  const { payment, order } = params;
+  const orderStatus = String(order.get("status") || "").trim().toUpperCase();
+  const paymentStatus = String(payment.get("status") || "").trim().toUpperCase();
+  const paymentCheckoutStartedAt = order.get("paymentCheckoutStartedAt");
+  const deadlineValue = order.get("paymentPromptDeadlineAt");
+  const deadlineAt = deadlineValue ? new Date(String(deadlineValue)) : null;
+  const deadlineExpired =
+    deadlineAt !== null &&
+    !Number.isNaN(deadlineAt.getTime()) &&
+    deadlineAt.getTime() <= Date.now();
+
+  if (
+    orderStatus !== "ACCEPTED" ||
+    paymentStatus === "PAID" ||
+    !paymentCheckoutStartedAt ||
+    !deadlineExpired
+  ) {
+    return false;
+  }
+
+  order.set("status", "CANCELLED");
+  order.set("cancelledAt", new Date());
+  order.set("cancelledBy", "SYSTEM");
+  order.set(
+    "cancellationReason",
+    "Le delai de paiement a expire avant confirmation du paiement.",
+  );
+  order.set("paymentPromptDeadlineAt", null);
+  order.set("paymentCheckoutStartedAt", null);
+  order.set("paymentCheckoutStatus", "EXPIRED");
+  await order.save();
+
+  const driverId = String(order.get("driverId") || "").trim();
+  if (driverId) {
+    await User.update({ isAvailable: true }, { where: { id: driverId } });
+  }
+
+  const io = (req as any).io;
+  const payload = {
+    orderId: String(order.get("id") || ""),
+    status: "CANCELLED",
+    cancelledBy: "SYSTEM",
+    cancellationReason: "Le delai de paiement a expire avant confirmation du paiement.",
+    payment_method: String(payment.get("method") || "CASH"),
+    payment_status: paymentStatus,
+    paymentPromptDeadlineAt: null,
+    paymentCheckoutStartedAt: null,
+    paymentPromptAttemptCount: Number(
+      order.get("paymentPromptAttemptCount") || 0,
+    ),
+    paymentCheckoutStatus: "EXPIRED",
+  };
+
+  io?.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);
+  if (driverId) {
+    io?.to(`user_${driverId}`).emit("order_status_changed", payload);
+  }
+
+  return true;
 }
 
 async function notifyPaymentEvent(
@@ -675,6 +744,22 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       });
     }
 
+    const orderStatus = String(order.get("status") || "").trim().toUpperCase();
+    const paymentCheckoutStatus = String(
+      order.get("paymentCheckoutStatus") || "",
+    )
+      .trim()
+      .toUpperCase();
+    const paymentCheckoutStartedAt = order.get("paymentCheckoutStartedAt");
+    const paymentPromptDeadlineValue = order.get("paymentPromptDeadlineAt");
+    const paymentPromptDeadlineAt = paymentPromptDeadlineValue
+      ? new Date(String(paymentPromptDeadlineValue))
+      : null;
+    const paymentPromptExpired =
+      paymentPromptDeadlineAt !== null &&
+      !Number.isNaN(paymentPromptDeadlineAt.getTime()) &&
+      paymentPromptDeadlineAt.getTime() <= Date.now();
+
     if (String(payment.get("status")) === "PAID") {
       return res.status(200).json({
         success: true,
@@ -685,6 +770,36 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
           checkoutToken: null,
         },
       });
+    }
+
+    if (orderStatus === "ACCEPTED") {
+      if (paymentCheckoutStatus === "PAID") {
+        return res.status(200).json({
+          success: true,
+          message: "Paiement deja effectue",
+          data: {
+            payment: paymentResponse(payment),
+            checkoutUrl: null,
+            checkoutToken: null,
+          },
+        });
+      }
+
+      if (paymentCheckoutStartedAt) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Un paiement est deja en cours pour cette course. Attendez sa confirmation ou sa mise a jour.",
+        });
+      }
+
+      if (paymentPromptExpired) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Le delai de paiement a expire pour cette course. Une nouvelle tentative n'est pas autorisee pour le moment.",
+        });
+      }
     }
 
     const amount = Math.max(100, Math.round(Number(payment.get("amount") || order.get("price") || 0)));
@@ -705,11 +820,7 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
       message: string;
       autoPaid?: boolean;
     };
-    const previousOrderCheckoutStatus = String(
-      order.get("paymentCheckoutStatus") || "",
-    )
-      .trim()
-      .toUpperCase();
+    const previousOrderCheckoutStatus = paymentCheckoutStatus;
 
     if (paymentMethod === "MOBILE_MONEY") {
       if (!isFedaPayConfigured()) {
@@ -775,11 +886,12 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
         await order.save();
         await payment.save();
 
-        const shouldStartDeferredSearch =
-          String(order.get("status") || "").trim().toUpperCase() ===
-            "PENDING" &&
-          !String(order.get("driverId") || "").trim() &&
-          previousOrderCheckoutStatus !== "PAID";
+        const shouldStartDeferredSearch = shouldStartDeferredSearchAfterPayment({
+          paymentMethod: payment.get("method"),
+          orderStatus: order.get("status"),
+          driverId: order.get("driverId"),
+          previousCheckoutStatus: previousOrderCheckoutStatus,
+        });
         if (shouldStartDeferredSearch) {
           order.set("searchStartedAt", new Date());
           await order.save();
@@ -836,7 +948,6 @@ export async function createOrderPaymentCheckout(req: AuthenticatedRequest, res:
     }
 
     order.set("paymentCheckoutStartedAt", new Date());
-    order.set("paymentPromptDeadlineAt", null);
     order.set("paymentCheckoutStatus", "IN_PROGRESS");
     await order.save();
     await payment.save();
@@ -961,6 +1072,19 @@ export async function syncPaymentStatus(req: AuthenticatedRequest, res: Response
         }
       }
     if (order) {
+      const cancelledBecauseExpired =
+        await cancelExpiredAcceptedOrderAfterCheckoutClose(req, {
+          payment,
+          order,
+        });
+      if (cancelledBecauseExpired) {
+        return res.status(200).json({
+          success: true,
+          message: "Statut synchronise",
+          data: paymentResponse(payment),
+        });
+      }
+
       await reconcileOrderAfterPaymentUpdate(req, { payment, order });
       await notifyPaymentEvent(req, {
         payment,

@@ -35,6 +35,46 @@ function buildPublicDocumentUrl(req: Request, storedName: string) {
   return `${protocol}://${host}/uploads/driver-documents/${storedName}`;
 }
 
+async function upsertDriverDocument(params: {
+  userId: string;
+  type: string;
+  url: string;
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  expiresAt?: Date | null;
+}) {
+  const { userId, type, url, status = "PENDING", expiresAt = null } = params;
+  const existingRows = await DriverDocument.findAll({
+    where: { userId, type },
+    order: [["createdAt", "DESC"]],
+  });
+
+  const latest = existingRows[0] ?? null;
+  const duplicates = existingRows.slice(1);
+
+  if (duplicates.length > 0) {
+    await Promise.all(duplicates.map((row) => row.destroy()));
+  }
+
+  if (latest) {
+    latest.set("url", url);
+    latest.set("status", status);
+    latest.set("expiresAt", expiresAt);
+    latest.set("verifiedAt", status === "APPROVED" ? new Date() : null);
+    latest.set("verifiedBy", null);
+    latest.set("rejectionReason", null);
+    await latest.save();
+    return latest;
+  }
+
+  return DriverDocument.create({
+    userId,
+    type,
+    url,
+    expiresAt,
+    status,
+  });
+}
+
 export async function listDriverDocuments(req: Request, res: Response) {
   try {
     const { status, type, userId, dateFrom, dateTo } = req.query as Record<string, string | undefined>;
@@ -86,10 +126,10 @@ export async function createDriverDocument(req: Request, res: Response) {
         return res.status(400).json({ success: false, message: "Le fichier du document ou son URL est obligatoire." });
     }
 
-    const row = await DriverDocument.create({
-      userId,
-      type,
-      url: finalUrl,
+    const row = await upsertDriverDocument({
+      userId: String(userId),
+      type: String(type),
+      url: String(finalUrl),
       expiresAt: expiresAt ? new Date(expiresAt) : null,
       status: "APPROVED", // Admin manual upload
     });
@@ -435,7 +475,7 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
 
     const createdDocuments = await Promise.all(
       uploads.map(({ type, file }) =>
-        DriverDocument.create({
+        upsertDriverDocument({
           userId: req.user!.id,
           type,
           status: "PENDING",
@@ -465,12 +505,21 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       await existingVehicle.save();
     }
 
-    await KycRequest.create({
-      userId: req.user.id,
-      type: "KYC",
-      status: "PENDING",
-      submittedAt: new Date(),
+    const existingPendingKyc = await KycRequest.findOne({
+      where: {
+        userId: req.user.id,
+        type: "KYC",
+        status: "PENDING",
+      },
     });
+    if (!existingPendingKyc) {
+      await KycRequest.create({
+        userId: req.user.id,
+        type: "KYC",
+        status: "PENDING",
+        submittedAt: new Date(),
+      });
+    }
 
     const confirmationMessage =
       "Felicitations pour la soumission complete de votre dossier. Nous reviendrons vers vous tres bientot.";
@@ -624,7 +673,7 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
 
     const createdDocuments = await Promise.all(
       uploads.map(({ type, file }) =>
-        DriverDocument.create({
+        upsertDriverDocument({
           userId: req.user!.id,
           type,
           status: "PENDING",

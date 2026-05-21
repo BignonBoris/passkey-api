@@ -12,6 +12,8 @@ import {
 } from "./authFlow.dto";
 import { AuthFlowService } from "./authFlow.service";
 import { catchAsync } from "../../utils/catchAsync";
+import User from "../../models/user.model";
+import { AuthenticatedRequest } from "../../types/auth-request";
 
 export const checkPhone = catchAsync(async (req: Request, res: Response) => {
   const body = checkPhoneSchema.parse(req.body);
@@ -222,3 +224,31 @@ export const adminSignUp = catchAsync(async (req: Request, res: Response) => {
     data: result.data,
   });
 });
+
+export const logout = catchAsync(
+  async (req: AuthenticatedRequest, res: Response) => {
+    const userId = String(req.user?.id || "").trim();
+    const role = String(req.user?.role || "").trim().toLowerCase();
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Non authentifie",
+      });
+    }
+
+    const updateData: Record<string, unknown> = {
+      refreshToken: null,
+    };
+    if (role === "livreur" || role === "driver") {
+      updateData.isAvailable = false;
+    }
+
+    await User.update(updateData, { where: { id: userId } });
+
+    return res.status(200).json({
+      success: true,
+      message: "Deconnexion effectuee",
+    });
+  },
+);

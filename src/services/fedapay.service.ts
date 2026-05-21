@@ -211,6 +211,11 @@ function stringifyPayload(payload: unknown) {
   }
 }
 
+function buildUniqueMerchantReference(paymentId: string) {
+  const normalizedPaymentId = String(paymentId || "").trim() || "payment";
+  return `PAY-${normalizedPaymentId}-${Date.now()}`;
+}
+
 function logFedaPayExchange(label: string, options: {
   url: string;
   headers?: unknown;
@@ -241,7 +246,9 @@ export async function createFedaPayCheckout(params: {
   }
 
   const callbackUrl = buildCallbackUrl(params.payment.id);
-  const merchantReference = `PAY-${params.payment.id}`;
+  const merchantReference = buildUniqueMerchantReference(
+    String(params.payment.id || "").trim(),
+  );
   const mode = String(process.env.FEDAPAY_PAYMENT_MODE || "mtn_open").trim();
   const customerName = splitCustomerName(String(params.user.get("name") || "").trim());
   const customerEmail = buildFallbackEmail(params.user);

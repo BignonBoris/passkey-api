@@ -1,6 +1,48 @@
 import { Request, Response } from "express";
 import { Op } from "sequelize";
 import RefundRequest from "../../models/refund-request.model";
+import Payment from "../../models/payment.model";
+import Order from "../../models/order.model";
+import User from "../../models/user.model";
+
+const refundIncludes = [
+  {
+    model: Payment,
+    as: "payment",
+    attributes: [
+      "id",
+      "amount",
+      "currency",
+      "status",
+      "method",
+      "provider",
+      "paidAt",
+      "providerReference",
+    ],
+  },
+  {
+    model: Order,
+    as: "order",
+    attributes: [
+      "id",
+      "publicCode",
+      "status",
+      "price",
+      "vehicleType",
+      "pickupAddress",
+      "destinationAddress",
+      "createdAt",
+      "cancelledAt",
+      "cancelledBy",
+      "cancellationReason",
+    ],
+  },
+  {
+    model: User,
+    as: "user",
+    attributes: ["id", "name", "phone", "email"],
+  },
+];
 
 export async function listRefunds(req: Request, res: Response) {
   try {
@@ -17,6 +59,7 @@ export async function listRefunds(req: Request, res: Response) {
 
     const rows = await RefundRequest.findAll({
       where: whereClause,
+      include: refundIncludes,
       order: [["createdAt", "DESC"]],
     });
     return res.status(200).json({ success: true, data: rows });
@@ -27,7 +70,9 @@ export async function listRefunds(req: Request, res: Response) {
 
 export async function getRefund(req: Request, res: Response) {
   try {
-    const row = await RefundRequest.findByPk(req.params.id);
+    const row = await RefundRequest.findByPk(req.params.id, {
+      include: refundIncludes,
+    });
     if (!row) return res.status(404).json({ success: false, message: "Refund not found" });
     return res.status(200).json({ success: true, data: row });
   } catch (error: any) {

@@ -1,5 +1,12 @@
 import express from "express";
-import { getSettings, updateSettings } from "./settings.controller";
+import {
+  createParcelNature,
+  deleteParcelNature,
+  getSettings,
+  listParcelNatures,
+  updateParcelNature,
+  updateSettings,
+} from "./settings.controller";
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 
@@ -46,5 +53,9 @@ const router = express.Router();
  */
 router.get("/", authenticate, authorize(PRIVILEGED_ROLES), getSettings);
 router.put("/", authenticate, authorize(PRIVILEGED_ROLES), updateSettings);
+router.get("/parcel-natures", authenticate, authorize(PRIVILEGED_ROLES), listParcelNatures);
+router.post("/parcel-natures", authenticate, authorize(PRIVILEGED_ROLES), createParcelNature);
+router.patch("/parcel-natures/:id", authenticate, authorize(PRIVILEGED_ROLES), updateParcelNature);
+router.delete("/parcel-natures/:id", authenticate, authorize(PRIVILEGED_ROLES), deleteParcelNature);
 
 export default router;

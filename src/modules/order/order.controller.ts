@@ -13,6 +13,7 @@ import UserAddress from '../../models/user-address.model';
 import DriverVehicle from "../../models/driver-vehicle.model";
 import DriverDocument from "../../models/driver-document.model";
 import Payment from "../../models/payment.model";
+import RefundRequest from "../../models/refund-request.model";
 import { calculateDeliveryPricing, calculateWaitingFees } from "../../services/pricing.service";
 import { calculateCancellationFees } from "../../services/cancellation.service";
 import { resolveCountryId } from "../../services/country.service";
@@ -34,6 +35,11 @@ import {
 import { SmsService } from "../../services/sms/sms.service";
 import { nomalizeCustomerPhone } from "../../utils/phoneNormalize";
 import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
+import {
+  paymentPromptWindowMs,
+  shouldPromptPaymentAfterDriverAccept,
+  shouldStartDriverSearchImmediatelyForPaymentMethod,
+} from "./order-payment-flow.service";
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -62,7 +68,6 @@ const DELIVERY_TRACKING_STATUSES = [
 ] as const;
 
 const ETA_CACHE_TTL_MS = 8000;
-const PAYMENT_PROMPT_WINDOW_MS = 3 * 60 * 1000;
 const APP_BASE_URL = String(process.env.APP_BASE_URL || "").trim().replace(/\/+$/, "");
 const SIMULATE_DRIVER_FOUND =
   String(process.env.SIMULATE_DRIVER_FOUND || "false").trim().toLowerCase() === "true";
@@ -327,6 +332,64 @@ async function resolveOrderDisplayPayment(orderId: string) {
   return payments[0];
 }
 
+async function createRefundRequestForCancelledRemotePayment(params: {
+  order: Order;
+  cancelledBy: string;
+  cancellationReason?: string | null;
+}) {
+  const orderId = String(params.order.get("id") || "").trim();
+  if (!orderId) return { created: false };
+
+  const payment = await resolveOrderDisplayPayment(orderId);
+  if (!payment) return { created: false };
+
+  const paymentId = String(payment.get("id") || "").trim();
+  const userId = String(params.order.get("userId") || payment.get("userId") || "").trim();
+  const paymentMethod = normalizePaymentMethod(payment.get("method"));
+  const paymentStatus = String(payment.get("status") || "").trim().toUpperCase();
+  const amount = Number(payment.get("amount") || params.order.get("price") || 0);
+
+  if (!paymentId || !userId) return { created: false };
+  if (!["MOBILE_MONEY", "CARD"].includes(paymentMethod) || paymentStatus !== "PAID") {
+    return { created: false };
+  }
+  if (!Number.isFinite(amount) || amount <= 0) return { created: false };
+
+  const existing = await RefundRequest.findOne({
+    where: {
+      paymentId,
+      orderId,
+      status: {
+        [Op.in]: ["PENDING", "APPROVED", "PAID"],
+      },
+    },
+  });
+  if (existing) {
+    return { created: false, refundRequest: existing };
+  }
+
+  const actor = String(params.cancelledBy || "").trim().toUpperCase() || "SYSTEM";
+  const reasonParts = [
+    "Demande de remboursement créée automatiquement après annulation d'une course payée.",
+    `Origine: ${actor}.`,
+  ];
+  const cancellationReason = String(params.cancellationReason || "").trim();
+  if (cancellationReason) {
+    reasonParts.push(`Motif: ${cancellationReason}`);
+  }
+
+  const refundRequest = await RefundRequest.create({
+    paymentId,
+    orderId,
+    userId,
+    amount,
+    reason: reasonParts.join(" ").trim(),
+    status: "PENDING",
+  });
+
+  return { created: true, refundRequest };
+}
+
 async function notifyUserDeliveryStep(
   order: Order,
   params: { title: string; body: string; type: string; route?: string }
@@ -405,6 +468,11 @@ async function cancelOrderAndBroadcast(params: {
   }
 
   await order.update(updatePayload);
+  const refundResult = await createRefundRequestForCancelledRemotePayment({
+    order,
+    cancelledBy,
+    cancellationReason: reason,
+  });
 
   if (driverId) {
     await User.update({ isAvailable: true }, { where: { id: driverId } });
@@ -454,6 +522,13 @@ async function cancelOrderAndBroadcast(params: {
       orderId,
     });
   }
+
+  return {
+    refundRequestCreated: refundResult.created,
+    refundRequestId: refundResult.refundRequest
+      ? String(refundResult.refundRequest.get("id") || "").trim()
+      : "",
+  };
 }
 
 function parseLatLng(raw?: string): { lat: number; lng: number } | null {
@@ -701,6 +776,11 @@ async function acceptOrderWithDriver(params: {
     return { success: false, message: "orderId et driverId sont requis." };
   }
 
+  const existingOrder = await Order.findByPk(orderId);
+  if (!existingOrder) {
+    return { success: false, message: "Course introuvable." };
+  }
+
   const paymentSnapshot = await getOrderPaymentSnapshot(orderId);
   const paymentMethod = String(paymentSnapshot.paymentMethod || "CASH")
     .trim()
@@ -709,11 +789,23 @@ async function acceptOrderWithDriver(params: {
   const paymentStatus = String(paymentSnapshot.paymentStatus || "PENDING")
     .trim()
     .toUpperCase();
-  const shouldAwaitRemotePayment =
+  const paymentCheckoutStatus = String(
+    existingOrder.get("paymentCheckoutStatus") || "",
+  )
+    .trim()
+    .toUpperCase();
+  const hasConfirmedRemotePayment =
     ["MOBILE_MONEY", "CARD"].includes(paymentMethod) &&
-    paymentStatus !== "PAID";
+    paymentCheckoutStatus === "PAID";
+  const effectivePaymentStatus = hasConfirmedRemotePayment
+    ? "PAID"
+    : paymentStatus;
+  const shouldAwaitRemotePayment = shouldPromptPaymentAfterDriverAccept({
+    paymentMethod,
+    paymentStatus: effectivePaymentStatus,
+  });
   const paymentPromptDeadlineAt = shouldAwaitRemotePayment
-    ? new Date(Date.now() + PAYMENT_PROMPT_WINDOW_MS)
+    ? new Date(Date.now() + paymentPromptWindowMs)
     : null;
   let activeVehicle: Record<string, unknown> | null = null;
   try {
@@ -721,7 +813,7 @@ async function acceptOrderWithDriver(params: {
       where: { driverId },
       order: [["isPrimary", "DESC"], ["createdAt", "DESC"]],
       raw: true,
-    }) as unknown as Record<string, unknown> | null;
+    }) as Record<string, unknown> | null;
   } catch (e) {}
   const driverVehicleId = String(activeVehicle?.id || "").trim() || null;
 
@@ -733,7 +825,11 @@ async function acceptOrderWithDriver(params: {
       paymentPromptDeadlineAt,
       paymentCheckoutStartedAt: null,
       paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
-      paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+      paymentCheckoutStatus: shouldAwaitRemotePayment
+        ? "AWAITING_ACTION"
+        : hasConfirmedRemotePayment
+          ? "PAID"
+          : null,
     },
     { where: { id: orderId, status: "PENDING" } }
   );
@@ -790,11 +886,15 @@ async function acceptOrderWithDriver(params: {
     ),
     completionOtp: order.get("completionOtp"),
     payment_method: paymentMethod,
-    payment_status: paymentStatus,
+    payment_status: effectivePaymentStatus,
     paymentPromptDeadlineAt,
     paymentCheckoutStartedAt: null,
     paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
-    paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+    paymentCheckoutStatus: shouldAwaitRemotePayment
+      ? "AWAITING_ACTION"
+      : hasConfirmedRemotePayment
+        ? "PAID"
+        : null,
   });
 
   params.io.to(`user_${driverId}`).emit("order_status_changed", {
@@ -802,11 +902,15 @@ async function acceptOrderWithDriver(params: {
     publicCode: String(order.get("publicCode") || ""),
     status: "ACCEPTED",
     payment_method: paymentMethod,
-    payment_status: paymentStatus,
+    payment_status: effectivePaymentStatus,
     paymentPromptDeadlineAt,
     paymentCheckoutStartedAt: null,
     paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
-    paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
+    paymentCheckoutStatus: shouldAwaitRemotePayment
+      ? "AWAITING_ACTION"
+      : hasConfirmedRemotePayment
+        ? "PAID"
+        : null,
   });
 
   params.io.to("drivers").emit("CANCEL_INCOMING_CALL", {
@@ -1124,7 +1228,8 @@ export const createOrder = async (req: Request, res: Response) => {
     const io: Server = (req as any).io;
     let notifiedDriversPayload: any[] = [];
     let searchRadiusKm: number | null = null;
-    const shouldStartSearchImmediately = paymentMethod === "CASH";
+    const shouldStartSearchImmediately =
+      shouldStartDriverSearchImmediatelyForPaymentMethod(paymentMethod);
     if (!simulationMode && shouldStartSearchImmediately) {
       try {
         const notifyResult = await startDriverSearchForOrder({
@@ -1188,13 +1293,19 @@ export const cancelDelivery = async (req: Request, res: Response) => {
     const order = await Order.findByPk(orderId);
     if (!order || order.get('status') === "COMPLETED") return res.status(400).json({ success: false });
     const io: Server = (req as any).io;
-    await cancelOrderAndBroadcast({
+    const cancellationResult = await cancelOrderAndBroadcast({
       order,
       io,
       cancelledBy: normalizeCancellationActor(req.body?.cancelledBy),
       cancellationReason: req.body?.cancellationReason,
     });
-    return res.status(200).json({ success: true });
+    return res.status(200).json({
+      success: true,
+      message: cancellationResult.refundRequestCreated
+        ? "La course a ete annulee. Une demande de remboursement a ete creee."
+        : "La course a ete annulee.",
+      data: cancellationResult,
+    });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
 
@@ -1371,7 +1482,7 @@ export const adminCancelDelivery = async (req: AuthenticatedRequest, res: Respon
     }
 
     const io: Server = (req as any).io;
-    await cancelOrderAndBroadcast({
+    const cancellationResult = await cancelOrderAndBroadcast({
       order,
       io,
       cancelledBy: "ADMIN",
@@ -1381,7 +1492,10 @@ export const adminCancelDelivery = async (req: AuthenticatedRequest, res: Respon
 
     return res.status(200).json({
       success: true,
-      message: "La course a ete annulee sans frais pour l'usager.",
+      message: cancellationResult.refundRequestCreated
+        ? "La course a ete annulee sans frais. Une demande de remboursement a ete creee."
+        : "La course a ete annulee sans frais pour l'usager.",
+      data: cancellationResult,
     });
   } catch (error) {
     return res.status(500).json({
@@ -1627,6 +1741,7 @@ export const submitOrderRating = async (req: AuthenticatedRequest, res: Response
     const requesterId = req.user?.id;
     const requesterRole = req.user?.role;
     const { orderId } = req.params;
+    const io: Server = (req as any).io;
     const rating = normalizeRatingValue(req.body?.rating ?? req.body?.note);
     const comment = String(req.body?.comment ?? req.body?.review ?? "").trim();
 
@@ -1813,6 +1928,24 @@ export const submitOrderRating = async (req: AuthenticatedRequest, res: Response
         },
       };
     });
+
+    if (
+      result.status === 200 &&
+      requesterRole === "livreur" &&
+      result.body?.success === true
+    ) {
+      const order = await Order.findByPk(orderId);
+      const userId = String(order?.get("userId") || "").trim();
+      if (userId) {
+        io?.to(`user_${userId}`).emit("driver_submitted_rating", {
+          orderId,
+          driverId: String(order?.get("driverId") || requesterId || "").trim(),
+          userId,
+          userRating: result.body?.data?.submittedRating ?? rating,
+          userRatedAt: result.body?.data?.ratedAt ?? new Date().toISOString(),
+        });
+      }
+    }
 
     return res.status(result.status).json(result.body);
   } catch (error) {
