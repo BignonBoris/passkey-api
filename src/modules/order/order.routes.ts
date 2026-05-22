@@ -15,6 +15,7 @@ import {
   broadcastDriverLocationForDelivery,
   cancelDelivery,
   estimateCancellation,
+  generateEmergencyOrderOtp,
   submitOrderRating,
   updateDeliveryStatus,
   updateDriverLocationForDelivery,
@@ -170,6 +171,7 @@ router.post('/:orderId/rating', authenticate, submitOrderRating);
  */
 router.patch('/:orderId/archive', authenticate, authorize(PRIVILEGED_ROLES), archiveOrder);
 router.post('/:orderId/admin-cancel', authenticate, authorize(PRIVILEGED_ROLES), adminCancelDelivery);
+router.post('/:orderId/emergency-otp', authenticate, authorize(PRIVILEGED_ROLES), generateEmergencyOrderOtp);
 
 /**
  * @swagger

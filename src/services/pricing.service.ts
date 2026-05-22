@@ -1,7 +1,7 @@
 import VehiclePricingConfig from "../models/vehicle-pricing-config.model";
 import DriverRevenueConfig from "../models/driver-revenue-config.model";
 import PricingRule, { PricingRuleType, PricingAdjustmentType } from "../models/pricing-rule.model";
-import { calculateDriverRevenue, RevenueCalculationInput, RevenueCalculationResult } from "./revenue.service";
+import { calculateCourseRevenueSettlement } from "./revenue.service";
 
 export interface PricingCalculationInput {
   vehicleType: string;
@@ -231,13 +231,13 @@ export async function calculateDeliveryPricing(input: PricingCalculationInput) {
   const rounded = Math.ceil(adjustedTotal / 50) * 50;
 
   const driverConfig = await resolveDriverRevenueConfig(input.vehicleType, input.countryId);
-  const revenueParams: RevenueCalculationInput = {
-    distanceKm: input.distanceKm,
-    durationMinutes: input.durationMinutes,
-    extras,
-    tip: input.tip ?? 0,
-  };
-  const revenue = calculateDriverRevenue(driverConfig, revenueParams);
+  const revenueSettlement = calculateCourseRevenueSettlement(driverConfig, {
+    courseAmount: rounded,
+  });
+  const tip = Number(input.tip ?? 0);
+  const driverRevenue = Number((revenueSettlement.driverRevenue + tip).toFixed(2));
+  const platformCommission = Number(revenueSettlement.platformShare.toFixed(2));
+  const serviceFee = 0;
 
   const snapshot: PricingSnapshot = {
     baseFare,
@@ -253,9 +253,9 @@ export async function calculateDeliveryPricing(input: PricingCalculationInput) {
     minimumFare,
     rawTotal,
     adjustedTotal,
-    driverRevenue: revenue.driverEarnings,
-    platformCommission: revenue.platformCommission,
-    serviceFee: revenue.serviceFee,
+    driverRevenue,
+    platformCommission,
+    serviceFee,
     ruleReferences: [...peak.ruleRefs, ...night.ruleRefs, ...earlyMorning.ruleRefs],
   };
 
@@ -266,9 +266,9 @@ export async function calculateDeliveryPricing(input: PricingCalculationInput) {
     distanceComponent,
     timeComponent,
     minimumFareApplied: rounded === minimumFare,
-    driverEarnings: revenue.driverEarnings,
-    platformCommission: revenue.platformCommission,
-    serviceFee: revenue.serviceFee,
+    driverEarnings: driverRevenue,
+    platformCommission,
+    serviceFee,
     peakSurcharge: Number(peak.amount.toFixed(0)),
     nightSurcharge: Number(night.amount.toFixed(0)),
     earlyMorningSurcharge: Number(earlyMorning.amount.toFixed(0)),

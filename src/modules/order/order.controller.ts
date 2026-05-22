@@ -93,6 +93,47 @@ type DeliveryEtaCacheEntry = {
 
 const deliveryEtaCache = new Map<string, DeliveryEtaCacheEntry>();
 
+function extractNotifiedDriverIdsFromOrder(order: Order): string[] {
+  const raw = order.get("driverSearchStatsJson");
+  if (typeof raw !== "string" || !raw.trim()) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      attempts?: Array<{
+        notifiedDrivers?: Array<{ id?: string }>;
+      }>;
+    };
+    const attempts = Array.isArray(parsed.attempts) ? parsed.attempts : [];
+    const ids = new Set<string>();
+
+    for (const attempt of attempts) {
+      const drivers = Array.isArray(attempt?.notifiedDrivers)
+        ? attempt.notifiedDrivers
+        : [];
+      for (const driver of drivers) {
+        const id = String(driver?.id || "").trim();
+        if (id) ids.add(id);
+      }
+    }
+
+    return [...ids];
+  } catch {
+    return [];
+  }
+}
+
+function emitCancelIncomingCall(
+  io: Server,
+  order: Order,
+  payload: Record<string, unknown>,
+) {
+  io.to("drivers").emit("CANCEL_INCOMING_CALL", payload);
+
+  for (const driverId of extractNotifiedDriverIdsFromOrder(order)) {
+    io.to(`user_${driverId}`).emit("CANCEL_INCOMING_CALL", payload);
+  }
+}
+
 function isPrivateHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
   if (!normalized) return false;
@@ -494,7 +535,7 @@ async function cancelOrderAndBroadcast(params: {
     driverId,
     cancellationReason: reason,
   });
-  io.to("drivers").emit("CANCEL_INCOMING_CALL", {
+  emitCancelIncomingCall(io, order, {
     orderId,
     requestId: orderId,
     cancelledBy,
@@ -912,7 +953,7 @@ async function acceptOrderWithDriver(params: {
         : null,
   });
 
-  params.io.to("drivers").emit("CANCEL_INCOMING_CALL", {
+  emitCancelIncomingCall(params.io, order, {
     orderId,
     requestId: orderId,
     acceptedByDriverId: driverId,
@@ -1773,12 +1814,12 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       paymentCheckoutStartedAt: orderForEvents.get('paymentCheckoutStartedAt'),
     };
     io.to(`user_${orderForEvents.get('userId')}`).emit('order_status_changed', payload);
-    if (status === 'ACCEPTED') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+    if (status === 'ACCEPTED') emitCancelIncomingCall(io, orderForEvents, {
       orderId,
       requestId: orderId,
       acceptedByDriverId: String(driverId || orderForEvents.get('driverId') || ''),
     });
-    if (status === 'NO_DRIVER_FOUND') io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+    if (status === 'NO_DRIVER_FOUND') emitCancelIncomingCall(io, orderForEvents, {
       orderId,
       requestId: orderId,
       cancelledBy: 'SYSTEM_NO_DRIVER_FOUND',
@@ -2254,7 +2295,7 @@ export const acceptDeliveryByDriver = async (req: Request, res: Response) => {
       paymentPromptAttemptCount: shouldAwaitRemotePayment ? 1 : 0,
       paymentCheckoutStatus: shouldAwaitRemotePayment ? "AWAITING_ACTION" : null,
     });
-    io.to('drivers').emit('CANCEL_INCOMING_CALL', {
+    emitCancelIncomingCall(io, order, {
       orderId,
       requestId: orderId,
       acceptedByDriverId: String(driverId || ''),

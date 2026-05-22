@@ -12,6 +12,7 @@ import {
   updateUserLocation,
   updateMyAvailability,
   deleteUser,
+  generateEmergencyUserOtp,
 } from "./user.controller";
 import { authenticate, authorize } from "../../middlewares/auth.middleware";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
@@ -270,6 +271,7 @@ router.patch("/:id/status", authenticate, authorize(PRIVILEGED_ROLES), updateUse
  *         description: Identité validée
  */
 router.patch("/:id/identity", authenticate, authorize(PRIVILEGED_ROLES), updateIdentityVerified);
+router.post("/:id/emergency-otp", authenticate, authorize(PRIVILEGED_ROLES), generateEmergencyUserOtp);
 
 /**
  * @swagger

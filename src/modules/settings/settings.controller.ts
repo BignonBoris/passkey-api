@@ -6,6 +6,7 @@ import AppSettings, {
   SettingsEntryObject,
   normalizeSettingsContent,
 } from "../../models/app-settings.model";
+import { getGoogleMapsApiKey } from "../maps/maps.config";
 
 const PREDEFINED_SECTIONS: SettingsSection[] = ["contact", "about", "operations"];
 const PARCEL_NATURES_KEY = "parcelNatureCatalog";
@@ -245,6 +246,24 @@ export async function listParcelNatures(_req: Request, res: Response) {
     return res.status(500).json({
       success: false,
       message: error?.message || "Impossible de recuperer les natures de colis",
+    });
+  }
+}
+
+export async function getAdminGoogleMapsKey(_req: Request, res: Response) {
+  try {
+    const apiKey = getGoogleMapsApiKey();
+    return res.status(200).json({
+      success: true,
+      data: {
+        apiKey,
+        source: apiKey ? "api" : "none",
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Impossible de recuperer la cle Google Maps",
     });
   }
 }

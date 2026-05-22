@@ -51,12 +51,8 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
       id,
       countryId: rawCountryId,
       vehicleType,
-      baseFare,
-      perKmRate,
-      perMinuteRate,
       commissionPercent,
       serviceFeePercent,
-      driverFixedAmount,
       driverPercent,
     } = req.body || {};
 
@@ -69,12 +65,12 @@ export async function createOrUpdateRevenueConfig(req: Request, res: Response) {
     const payload = {
       countryId: await resolveCountryId(String(rawCountryId || "")),
       vehicleType,
-      baseFare: parseNumber(baseFare),
-      perKmRate: parseNumber(perKmRate),
-      perMinuteRate: parseNumber(perMinuteRate),
+      baseFare: 0,
+      perKmRate: 0,
+      perMinuteRate: 0,
       commissionPercent: parseNumber(commissionPercent, 0),
       serviceFeePercent: parseNumber(serviceFeePercent, 0),
-      driverFixedAmount: parseNumber(driverFixedAmount, 0),
+      driverFixedAmount: 0,
       driverPercent: parseNumber(driverPercent, 0),
     };
 
@@ -105,12 +101,12 @@ export async function updateRevenueConfig(req: Request, res: Response) {
       return res.status(404).json({ success: false, message: "Configuration introuvable" });
 
     const payload = {
-      baseFare: parseNumber(req.body.baseFare, config.baseFare),
-      perKmRate: parseNumber(req.body.perKmRate, config.perKmRate),
-      perMinuteRate: parseNumber(req.body.perMinuteRate, config.perMinuteRate),
+      baseFare: 0,
+      perKmRate: 0,
+      perMinuteRate: 0,
       commissionPercent: parseNumber(req.body.commissionPercent, config.commissionPercent),
       serviceFeePercent: parseNumber(req.body.serviceFeePercent, config.serviceFeePercent),
-      driverFixedAmount: parseNumber(req.body.driverFixedAmount, (config as any).driverFixedAmount ?? 0),
+      driverFixedAmount: 0,
       driverPercent: parseNumber(req.body.driverPercent, (config as any).driverPercent ?? 0),
     };
 
@@ -179,13 +175,12 @@ export async function calculateRevenue(req: Request, res: Response) {
       });
     }
 
-    if (parsedDistance <= 0 && parsedDuration <= 0) {
-      return res.status(400).json({ success: false, message: "distanceKm, durationMinutes or courseAmount is required" });
+    if (parsedCourseAmount <= 0) {
+      return res.status(400).json({ success: false, message: "courseAmount is required" });
     }
 
     const input: RevenueCalculationInput = {
-      distanceKm: parsedDistance,
-      durationMinutes: parsedDuration,
+      courseAmount: parsedCourseAmount,
       tip: parseNumber(tip, 0),
       extras: parseNumber(extras, 0),
     };
@@ -193,7 +188,7 @@ export async function calculateRevenue(req: Request, res: Response) {
     const calculated = calculateDriverRevenue(revenueConfig, input);
     return res.status(200).json({
       success: true,
-      data: { config: revenueConfig, calculation: calculated, mode: "LEGACY_DISTANCE_TIME" },
+      data: { config: revenueConfig, calculation: calculated, mode: "COURSE_AMOUNT" },
     });
   } catch (error: any) {
     return res

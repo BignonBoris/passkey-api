@@ -13,6 +13,8 @@ import {
 import { resolveCountryFromCoordinates } from "../../services/country.service";
 import Country from "../../models/country.model";
 import DriverAccount from "../../models/driver-account.model";
+import { generateOTP } from "../../utils/otp";
+import { SmsService } from "../../services/sms/sms.service";
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -829,6 +831,73 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error?.message || "Erreur serveur inconnue",
+    });
+  }
+};
+
+export const generateEmergencyUserOtp = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const userId = String(req.params.id || "").trim();
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Identifiant utilisateur requis",
+      });
+    }
+
+    const user = await User.findByPk(userId, {
+      attributes: { exclude: ["password"] },
+    });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Utilisateur introuvable",
+      });
+    }
+
+    const role = String(user.get("role") || "").trim();
+    if (!["usager", "livreur"].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "L'OTP d'urgence n'est disponible que pour les usagers et les livreurs.",
+      });
+    }
+
+    const phone = String(user.get("phone") || "").trim();
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Aucun numero de telephone n'est enregistre pour cet utilisateur.",
+      });
+    }
+
+    const otp = generateOTP();
+    const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    await user.update({ otpCode: otp, otpExpiresAt });
+
+    const smsSent = await SmsService.sendOtp(phone, otp);
+
+    return res.status(200).json({
+      success: true,
+      message: smsSent
+        ? "OTP d'urgence genere et envoye par SMS."
+        : "OTP d'urgence genere, mais l'envoi SMS a echoue.",
+      data: {
+        otp,
+        otpExpiresAt,
+        smsSent,
+        userId,
+        role,
+        phone,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Impossible de generer l'OTP d'urgence.",
     });
   }
 };

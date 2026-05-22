@@ -2,6 +2,7 @@ import express from "express";
 import {
   createParcelNature,
   deleteParcelNature,
+  getAdminGoogleMapsKey,
   getSettings,
   listParcelNatures,
   updateParcelNature,
@@ -52,6 +53,7 @@ const router = express.Router();
  *         description: Paramètres mis à jour
  */
 router.get("/", authenticate, authorize(PRIVILEGED_ROLES), getSettings);
+router.get("/google-maps-key", authenticate, authorize(PRIVILEGED_ROLES), getAdminGoogleMapsKey);
 router.put("/", authenticate, authorize(PRIVILEGED_ROLES), updateSettings);
 router.get("/parcel-natures", authenticate, authorize(PRIVILEGED_ROLES), listParcelNatures);
 router.post("/parcel-natures", authenticate, authorize(PRIVILEGED_ROLES), createParcelNature);
