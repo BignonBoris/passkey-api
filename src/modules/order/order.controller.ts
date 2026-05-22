@@ -17,7 +17,6 @@ import RefundRequest from "../../models/refund-request.model";
 import { calculateDeliveryPricing, calculateWaitingFees } from "../../services/pricing.service";
 import { calculateCancellationFees } from "../../services/cancellation.service";
 import { resolveCountryId } from "../../services/country.service";
-import AppSettings from '../../models/app-settings.model';
 import sequelize from '../../config/database';
 import Country from "../../models/country.model";
 import { AuthenticatedRequest } from '../../types/auth-request';
@@ -737,12 +736,12 @@ async function sendAcceptedOrderOtpSmsIfPossible(params: {
   await SmsService.sendSmsViaTwilio(phone, message);
 }
 
-async function getDriverSearchRadiusKm(): Promise<number> {
+async function getDriverSearchRadiusKm(countryId?: string | null): Promise<number> {
   try {
-    const settings = await AppSettings.findOne({ where: { section: 'operations' } });
-    if (!settings) return 5;
-    const content = settings.get('content');
-    const radius = Number(content?.driverLocationDistanceKm);
+    const resolvedCountryId = await resolveCountryId(countryId || "");
+    const country = await Country.findByPk(resolvedCountryId);
+    if (!country) return 5;
+    const radius = Number(country.get("driverLocationDistanceKm"));
     return Number.isFinite(radius) && radius > 0 ? radius : 5;
   } catch {
     return 5;
@@ -1048,7 +1047,9 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   const pickup = parseLatLng(String(order.get('pickupLocation')));
   if (!pickup) return;
 
-  const radiusKm = await getDriverSearchRadiusKm();
+  const radiusKm = await getDriverSearchRadiusKm(
+    String(order.get("countryId") || "").trim(),
+  );
   console.log(`\n[RECHERCHE LIVREURS] Commande ID: ${order.get('id')}`);
   console.log(` - Point de ramassage: ${order.get('pickupLocation')} (${order.get('pickupAddress')})`);
   console.log(` - Rayon de recherche configuré: ${radiusKm} km`);
@@ -1629,6 +1630,82 @@ export const bulkDeleteOrders = async (req: Request, res: Response) => {
     await Order.destroy({ where: { id: { [Op.in]: orderIds } } });
     return res.status(200).json({ success: true });
   } catch (error) { return res.status(500).json({ success: false }); }
+};
+
+export const generateEmergencyOrderOtp = async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Course introuvable" });
+    }
+
+    const status = String(order.get("status") || "").trim().toUpperCase();
+    if (["COMPLETED", "CANCELLED"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Impossible de regenerer un OTP pour une course terminee ou annulee.",
+      });
+    }
+
+    const otp = generateCompletionOtp();
+    await order.update({
+      completionOtp: otp,
+      completionOtpValidatedAt: null,
+    });
+
+    const deliveryPhone = String(order.get("deliveryPhone") || "").trim();
+    const parcelNature = String(
+      order.get("parcelNature") || order.get("packageDescription") || "",
+    ).trim();
+    const smsSent = deliveryPhone
+      ? await sendAcceptedOrderOtpSmsIfPossible({
+          phone: deliveryPhone,
+          otp,
+          parcelNature,
+        })
+      : false;
+
+    await notifyUserDeliveryStep(order, {
+      title: "Nouveau code OTP",
+      body: "Un nouveau code OTP de livraison a ete genere par l'administration.",
+      type: "EMERGENCY_ORDER_OTP",
+      route: "/app",
+    });
+
+    const io: Server | undefined = (req as any).io;
+    if (io) {
+      const payload = {
+        orderId,
+        status,
+        completionOtp: otp,
+        emergencyOtpGeneratedAt: new Date().toISOString(),
+      };
+      io.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);
+      const driverId = String(order.get("driverId") || "").trim();
+      if (driverId) {
+        io.to(`user_${driverId}`).emit("order_status_changed", payload);
+      }
+      io.to("rides").emit("ride:updated", payload);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: smsSent
+        ? "OTP d'urgence de la course genere et envoye."
+        : "OTP d'urgence de la course genere, mais l'envoi SMS a echoue.",
+      data: {
+        orderId,
+        otp,
+        smsSent,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: error?.message || "Impossible de regenerer l'OTP de la course.",
+    });
+  }
 };
 
 export const updateOrderStatus = async (req: Request, res: Response) => {
