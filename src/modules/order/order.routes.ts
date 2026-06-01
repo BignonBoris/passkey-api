@@ -17,6 +17,7 @@ import {
   estimateCancellation,
   generateEmergencyOrderOtp,
   submitOrderRating,
+  reportDriverTrackingHealth,
   updateDeliveryStatus,
   updateDriverLocationForDelivery,
   updateOrderStatus,
@@ -386,6 +387,7 @@ router.patch('/deliveries/:orderId/status', authenticate, updateDeliveryStatus);
  */
 router.patch('/deliveries/:orderId/driver-location', authenticate, updateDriverLocationForDelivery);
 router.patch('/deliveries/:orderId/driver-location/live', authenticate, broadcastDriverLocationForDelivery);
+router.patch('/deliveries/:orderId/tracking-health', authenticate, reportDriverTrackingHealth);
 
 /**
  * @swagger

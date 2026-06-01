@@ -4,6 +4,7 @@ import "./models/country.model";
 import "./models/user.model";
 import "./models/status-history.model";
 import "./models/order.model";
+import "./models/order-tracking-health.model";
 import "./models/payment.model";
 import "./models/payout.model";
 import "./models/kyc-request.model";
@@ -51,58 +52,66 @@ import { ensureDefaultCountries } from "./services/country.service";
 
 // const PORT = process.env.PORT || 3000;
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const SHOULD_BOOTSTRAP_DB = isTruthyEnv(process.env.DB_BOOTSTRAP_ON_START);
 
 async function startServer() {
   try {
-    if (SHOULD_BOOTSTRAP_DB) {
-      // Bootstrap is intentionally opt-in because it can be slow on hosted databases.
-      // Render should normally boot with DB_BOOTSTRAP_ON_START=false.
+    const shouldResetDatabase = process.env.RESET_DATABASE === "true";
+    const shouldExitAfterReset = process.env.RESET_DATABASE_ONLY === "true";
+
+    if (shouldResetDatabase) {
+      await resetDatabase();
+    } else {
+      // 1. First ensure critical columns exist in tables that might already be there
+      // without the countryId field (which causes sync errors on unique indexes)
       await ensureCountryColumnsExist();
       await ensureRiderColumnsExist();
-      await cleanupVehiclePricingConstraints();
+      if (process.env.REBUILD_VEHICLE_PRICING_CONFIG_TABLES === "true") {
+        await cleanupVehiclePricingConstraints();
+      }
 
+      // 2. Sync all models/indexes
       await sequelize.sync();
-
-      await ensureCountrySchema();
-      await ensureCountryDistanceColumns();
-      await ensureDefaultCountries();
-      await ensureOrderArchiveColumn();
-      await ensureOrderOtpColumns();
-      await ensureOrderPublicCodeColumn();
-      await ensureOrderPaymentPromptColumns();
-      await ensureOrderRevenueColumns();
-      await ensureOrderPricingColumns();
-      await ensureReturnOrderColumns();
-      await ensureOrderRatingColumns();
-      await ensureOrderSearchStatsColumns();
-      await ensureUserRefreshTokenColumn();
-      await ensureIncidentSchema();
-      await ensureFoodOrderColumns();
-      await ensurePricingRulesTable();
-      await ensurePaymentSchema();
-      await ensureDriverRevenueConfigSchema();
-      await ensureSupportSchema();
-      await seedSupportTicketCategories();
-      await ensureFoodCatalogSchema();
-      await seedVehicleTypes();
-      await ensureDefaultAppSettings();
-      await seedDefaultAdmin();
-      await seedFoodHomeData();
-    } else {
-      console.log("DB bootstrap skipped (DB_BOOTSTRAP_ON_START=false).");
     }
+
+    // 3. Complete the rest of the schema adjustments
+    await ensureCountrySchema();
+    await ensureCountryDistanceColumns();
+    await ensureDefaultCountries();
+    await ensureOrderArchiveColumn();
+    await ensureOrderOtpColumns();
+    await ensureOrderPublicCodeColumn();
+    await ensureOrderPaymentPromptColumns();
+    await ensureOrderRevenueColumns();
+    await ensureOrderPricingColumns();
+    await ensureReturnOrderColumns();
+    await ensureOrderRatingColumns();
+    await ensureOrderSearchStatsColumns();
+    await ensureUserRefreshTokenColumn();
+    await ensureIncidentSchema();
+    await ensureFoodOrderColumns();
+    await ensurePricingRulesTable();
+    await ensurePaymentSchema();
+    await ensureDriverRevenueConfigSchema();
+    await ensureSupportSchema();
+    await seedSupportTicketCategories();
+    await ensureFoodCatalogSchema();
+    await seedVehicleTypes();
+    await ensureDefaultAppSettings();
+    await seedDefaultAdmin();
+    await seedFoodHomeData();
+
+    if (shouldExitAfterReset) {
+      console.log("[migration] RESET_DATABASE_ONLY=true, server not started.");
+      await sequelize.close();
+      return;
+    }
+
     server.listen(PORT, () => {
       console.log(`API running on http://localhost:${PORT}`);
     });
   } catch (error) {
     console.error("Database sync failed:", error);
-    process.exit(1);
   }
-}
-
-function isTruthyEnv(value?: string) {
-  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
 
 async function ensureCountryDistanceColumns() {
@@ -1747,16 +1756,13 @@ async function ensureDefaultAppSettings() {
     }
   }
 }
-
-
-// async function resetDatabase() {
-//   try {
-//     // ATTENTION : force: true supprime toutes les données !
-//     await sequelize.sync({ force: true });
-//     console.log("✅ Base de données réinitialisée et tables recréées !");
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la réinitialisation :", error);
-//   }
-// }
-
-// resetDatabase();
+async function resetDatabase() {
+  try {
+    // ATTENTION : force: true supprime toutes les données !
+    await sequelize.sync({ force: true });
+    console.log("[migration] Base de donnees reinitialisee et tables recreees !");
+  } catch (error) {
+    console.error("[migration] Erreur lors de la reinitialisation :", error);
+    throw error;
+  }
+}

@@ -15,6 +15,21 @@ import Country from "../../models/country.model";
 import DriverAccount from "../../models/driver-account.model";
 import { generateOTP } from "../../utils/otp";
 import { SmsService } from "../../services/sms/sms.service";
+import Order from "../../models/order.model";
+
+const DRIVER_ACTIVE_DELIVERY_STATUSES = [
+  "ASSIGNED",
+  "ACCEPTED",
+  "DRIVER_ASSIGNED",
+  "DRIVER_ARRIVED_PICKUP",
+  "DRIVER_LEFT_PICKUP",
+  "PICKED_UP",
+  "IN_PROGRESS",
+  "ONGOING",
+  "ON_GOING",
+  "IN_TRANSIT",
+] as const;
+const DRIVER_ACTIVE_DELIVERY_STATUS_SET = new Set(DRIVER_ACTIVE_DELIVERY_STATUSES);
 
 function toSafeUser(user: any) {
   if (!user) return user;
@@ -46,6 +61,55 @@ function buildPublicUploadUrl(
   const host = req.get("host");
   if (!host) return null;
   return `${protocol}://${host}/uploads/${folder}/${storedName}`;
+}
+
+function normalizeDeliveryStatus(status: unknown): string {
+  return String(status ?? "").trim().toUpperCase();
+}
+
+async function attachDriverDeliveryState(users: any[]) {
+  const driverIds = users
+    .filter((user) => String(user?.role || "").trim() === "livreur")
+    .map((user) => String(user?.id || "").trim())
+    .filter(Boolean);
+
+  if (driverIds.length === 0) {
+    return users;
+  }
+
+  const activeOrders = await Order.findAll({
+    where: {
+      driverId: { [Op.in]: driverIds },
+      status: { [Op.in]: Array.from(DRIVER_ACTIVE_DELIVERY_STATUS_SET) },
+    },
+    attributes: ["id", "driverId", "status", "updatedAt"],
+    raw: true,
+    order: [["updatedAt", "DESC"]],
+  });
+
+  const activeByDriver = new Map<string, { orderId: string; status: string }>();
+  activeOrders.forEach((order) => {
+    const rawOrder = order as unknown as Record<string, unknown>;
+    const driverId = String(rawOrder.driverId || "").trim();
+    if (!driverId || activeByDriver.has(driverId)) return;
+    activeByDriver.set(driverId, {
+      orderId: String(rawOrder.id || "").trim(),
+      status: normalizeDeliveryStatus(rawOrder.status),
+    });
+  });
+
+  return users.map((user) => {
+    if (String(user?.role || "").trim() !== "livreur") {
+      return user;
+    }
+
+    const activeDelivery = activeByDriver.get(String(user?.id || "").trim()) || null;
+    return {
+      ...user,
+      activeDeliveryOrderId: activeDelivery?.orderId ?? null,
+      activeDeliveryStatus: activeDelivery?.status ?? null,
+    };
+  });
 }
 
 export const getMyProfile = async (req: AuthenticatedRequest, res: Response) => {
@@ -313,10 +377,13 @@ export const getUsers = async (req: Request, res: Response) => {
       order: [['createdAt', 'DESC']]
     });
 
+    const safeUsers = users.map((user) => toSafeUser(user));
+    const enrichedUsers = await attachDriverDeliveryState(safeUsers);
+
     return res.status(200).json({
       success: true,
-      count: users.length,
-      data: users,
+      count: enrichedUsers.length,
+      data: enrichedUsers,
     });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });
@@ -738,6 +805,25 @@ export const updateMyAvailability = async (
         message:
           "Votre compte doit Ãªtre activÃ© par un administrateur pour passer en ligne.",
       });
+    }
+
+    if (isAvailable) {
+      const activeDelivery = await Order.findOne({
+        where: {
+          driverId: userId,
+          status: {
+            [Op.in]: DRIVER_ACTIVE_DELIVERY_STATUSES,
+          },
+        },
+      });
+
+      if (activeDelivery) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Vous avez une livraison en cours. Terminez-la avant de vous remettre disponible.",
+        });
+      }
     }
 
     const updatedUser = await UserRepository.updateUser({

@@ -203,7 +203,15 @@ export class AuthFlowService {
       otp = await saveOtp(normalizedPhone, role);
     } catch (error) {
       if (error instanceof OtpDeliveryError) {
-        return { success: false, status: 502, message: error.message };
+        console.warn(
+          `[AUTH][SIGNUP_OTP_SMS_FAILED] phone=${normalizedPhone} role=${role}`
+        );
+        return {
+          success: true,
+          status: 201,
+          message: "Compte créé.",
+          data: { userId: user.id, otp: otp ?? "" },
+        };
       }
       throw error;
     }
@@ -211,7 +219,7 @@ export class AuthFlowService {
       success: true,
       status: 201,
       message: "Compte créé. Code OTP envoyé.",
-      data: { userId: user.id, otp },
+      data: { userId: user.id, otp: otp ?? "" },
     };
   }
 

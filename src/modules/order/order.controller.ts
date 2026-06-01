@@ -39,6 +39,10 @@ import {
   shouldPromptPaymentAfterDriverAccept,
   shouldStartDriverSearchImmediatelyForPaymentMethod,
 } from "./order-payment-flow.service";
+import {
+  getOrderTrackingHealthSnapshot,
+  recordOrderTrackingHealthSnapshot,
+} from "../../services/order-tracking-health.service";
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -64,6 +68,18 @@ const DELIVERY_TRACKING_STATUSES = [
   "DRIVER_LEFT_PICKUP",
   "PICKED_UP",
   "IN_TRANSIT",
+] as const;
+
+const DRIVER_ACTIVE_ORDER_STATUSES = [
+  "ACCEPTED",
+  "DRIVER_ASSIGNED",
+  "DRIVER_ARRIVED_PICKUP",
+  "DRIVER_LEFT_PICKUP",
+  "PICKED_UP",
+  "IN_TRANSIT",
+  "IN_PROGRESS",
+  "ONGOING",
+  "ON_GOING",
 ] as const;
 
 const ETA_CACHE_TTL_MS = 8000;
@@ -305,13 +321,19 @@ async function buildTrackingDataForOrder(orderId: string) {
     );
   }
 
-  const { paymentMethod, paymentStatus } = await getOrderPaymentSnapshot(orderId);
+  const [paymentSnapshot, trackingHealth] = await Promise.all([
+    getOrderPaymentSnapshot(orderId),
+    getOrderTrackingHealthSnapshot(orderId).catch(() => null),
+  ]);
+  const { paymentMethod, paymentStatus } = paymentSnapshot;
   const rawOrderPayload = order as unknown as Record<string, unknown>;
   const orderPayload = {
     ...rawOrderPayload,
     payment_method: paymentMethod,
     payment_status: paymentStatus,
     ...buildPaymentPromptPayload(rawOrderPayload),
+    driverTrackingHealth: trackingHealth,
+    driverHealth: trackingHealth,
   };
   const latitude = parseNumber(driver?.latitude ?? rawOrderPayload["driverLatitude"]);
   const longitude = parseNumber(driver?.longitude ?? rawOrderPayload["driverLongitude"]);
@@ -327,7 +349,13 @@ async function buildTrackingDataForOrder(orderId: string) {
 
   return {
     order: orderPayload,
-    driver,
+    driver: driver
+      ? {
+          ...driver,
+          trackingHealth,
+          health: trackingHealth,
+        }
+      : null,
     vehicle,
     eta,
   };
@@ -821,6 +849,14 @@ async function acceptOrderWithDriver(params: {
     return { success: false, message: "Course introuvable." };
   }
 
+  const activeOrder = await findActiveOrderForDriver(driverId, orderId);
+  if (activeOrder) {
+    return {
+      success: false,
+      message: "Vous avez déjà une livraison en cours. Terminez-la avant d'accepter une nouvelle course.",
+    };
+  }
+
   const paymentSnapshot = await getOrderPaymentSnapshot(orderId);
   const paymentMethod = String(paymentSnapshot.paymentMethod || "CASH")
     .trim()
@@ -897,6 +933,18 @@ async function acceptOrderWithDriver(params: {
     phone: String(driver?.phone || "").trim(),
   });
 
+  void recordOrderTrackingHealthSnapshot({
+    orderId,
+    driverId,
+    latitude: driver?.latitude,
+    longitude: driver?.longitude,
+    socketConnected: true,
+    appState: "ACCEPTED",
+    metadata: {
+      source: "ORDER_ACCEPTED",
+    },
+  }).catch(() => null);
+
   const vehicle = activeVehicle;
 
   const userId = order.get("userId");
@@ -951,6 +999,15 @@ async function acceptOrderWithDriver(params: {
       : hasConfirmedRemotePayment
         ? "PAID"
         : null,
+  });
+
+  params.io.to("rides").emit("ride:updated", {
+    id: orderId,
+    orderId,
+    status: "ACCEPTED",
+    driverId,
+    publicCode: String(order.get("publicCode") || ""),
+    updatedAt: new Date().toISOString(),
   });
 
   emitCancelIncomingCall(params.io, order, {
@@ -1023,6 +1080,28 @@ function isTruthyAvailability(value: unknown): boolean {
     String(value || "").trim().toLowerCase() === "true" ||
     String(value || "").trim() === "1"
   );
+}
+
+async function findActiveOrderForDriver(driverId: string, excludedOrderId?: string) {
+  const normalizedDriverId = String(driverId || "").trim();
+  if (!normalizedDriverId) return null;
+
+  const where: Record<string, unknown> = {
+    driverId: normalizedDriverId,
+    status: {
+      [Op.in]: [...DRIVER_ACTIVE_ORDER_STATUSES],
+    } as any,
+  };
+
+  const normalizedExcludedOrderId = String(excludedOrderId || "").trim();
+  if (normalizedExcludedOrderId) {
+    where.id = { [Op.ne]: normalizedExcludedOrderId } as any;
+  }
+
+  return Order.findOne({
+    where: where as any,
+    raw: true,
+  });
 }
 
 function hasUsableFcmToken(value: unknown): boolean {
@@ -1216,12 +1295,24 @@ export async function startDriverSearchForOrder(params: {
   paymentRow: any;
   pricing?: any;
 }) {
-  return notifyNearbyDrivers(
+  const result = await notifyNearbyDrivers(
     params.order,
     params.io,
     params.pricing ?? null,
     params.paymentRow,
   );
+  const orderId = String(params.order.get("id") || "").trim();
+  params.io.to("rides").emit("ride:search_started", {
+    id: orderId,
+    orderId,
+    publicCode: String(params.order.get("publicCode") || "").trim(),
+    status: String(params.order.get("status") || "PENDING"),
+    searchStartedAt: String(params.order.get("searchStartedAt") || new Date().toISOString()),
+    radiusKm: result?.radiusKm ?? null,
+    notifiedDriversCount: Array.isArray(result?.notifiedDrivers) ? result.notifiedDrivers.length : 0,
+    updatedAt: new Date().toISOString(),
+  });
+  return result;
 }
 
 export const createOrder = async (req: Request, res: Response) => {
@@ -1310,6 +1401,14 @@ export const driverArrivedPickup = async (req: Request, res: Response) => {
     await notifyUserDeliveryStep(order, { title: "Livreur arrive", body: "Votre livreur est arrive.", type: "DRIVER_ARRIVED_PICKUP" });
     const io: Server = (req as any).io;
     io.to(`user_${order.get('userId')}`).emit("order_status_changed", { orderId, status: "DRIVER_ARRIVED_PICKUP", driverId: order.get('driverId') });
+    io.to("rides").emit("ride:updated", {
+      id: orderId,
+      orderId,
+      status: "DRIVER_ARRIVED_PICKUP",
+      driverId: order.get("driverId"),
+      publicCode: String(order.get("publicCode") || ""),
+      updatedAt: new Date().toISOString(),
+    });
     return res.status(200).json({ success: true, data: order });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
@@ -1325,6 +1424,14 @@ export const driverLeftPickup = async (req: Request, res: Response) => {
     await notifyUserDeliveryStep(order, { title: "Livraison demarree", body: "Le livreur a recupere le colis.", type: "DRIVER_LEFT_PICKUP" });
     const io: Server = (req as any).io;
     io.to(`user_${order.get('userId')}`).emit("order_status_changed", { orderId, status: "DRIVER_LEFT_PICKUP", driverId: order.get('driverId') });
+    io.to("rides").emit("ride:updated", {
+      id: orderId,
+      orderId,
+      status: "DRIVER_LEFT_PICKUP",
+      driverId: order.get("driverId"),
+      publicCode: String(order.get("publicCode") || ""),
+      updatedAt: new Date().toISOString(),
+    });
     return res.status(200).json({ success: true, data: waiting });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
@@ -2104,7 +2211,23 @@ export const assignNearestDriver = async (req: Request, res: Response) => {
     if (!order) return res.status(404).json({ success: false });
     const availableDrivers = await User.findAll({ where: { role: 'livreur', isActive: true, isAvailable: true }, raw: true });
     if (!availableDrivers.length) return res.status(404).json({ success: false });
-    const selected = availableDrivers[0] as any;
+
+    const eligibleDrivers: any[] = [];
+    for (const candidate of availableDrivers as any[]) {
+      const activeOrder = await findActiveOrderForDriver(String(candidate.id || "").trim(), orderId);
+      if (!activeOrder) {
+        eligibleDrivers.push(candidate);
+      }
+    }
+
+    if (!eligibleDrivers.length) {
+      return res.status(409).json({
+        success: false,
+        message: "Aucun livreur disponible pour cette course.",
+      });
+    }
+
+    const selected = eligibleDrivers[0] as any;
 
     let vehicle = null;
     let media = { driverPhotoUrl: "", vehiclePhotoUrl: "" };
@@ -2342,16 +2465,47 @@ export const updateDeliveryStatus = async (req: Request, res: Response) => {
 export const updateDriverLocationForDelivery = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
-    const { driverId, latitude, longitude } = req.body;
-    await User.update({ latitude, longitude }, { where: { id: driverId } });
-    return res.status(200).json({ success: true });
+    const { driverId, latitude, longitude, gpsEnabled, locationPermission, socketConnected, appState } = req.body;
+    const normalizedDriverId = String(driverId || "").trim();
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!normalizedDriverId || Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({
+        success: false,
+        message: "driverId, latitude et longitude sont requis",
+      });
+    }
+
+    await User.update(
+      { latitude: lat, longitude: lng, locationUpdatedAt: new Date() },
+      { where: { id: normalizedDriverId } }
+    );
+    let trackingHealth = null;
+    try {
+      trackingHealth = await recordOrderTrackingHealthSnapshot({
+        orderId,
+        driverId: normalizedDriverId,
+        latitude: lat,
+        longitude: lng,
+        gpsEnabled,
+        locationPermission,
+        socketConnected,
+        appState,
+        metadata: {
+          source: "ORDER_DRIVER_LOCATION_PATCH",
+        },
+      });
+    } catch (_) {
+      trackingHealth = null;
+    }
+    return res.status(200).json({ success: true, data: { trackingHealth } });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
 
 export const broadcastDriverLocationForDelivery = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;
-    const { driverId, latitude, longitude } = req.body;
+    const { driverId, latitude, longitude, gpsEnabled, locationPermission, socketConnected, appState } = req.body;
 
     const order = await Order.findByPk(orderId, { raw: true });
     if (!order) {
@@ -2375,6 +2529,28 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       latitude: lat,
       longitude: lng,
     });
+    await User.update(
+      { latitude: lat, longitude: lng, locationUpdatedAt: new Date() },
+      { where: { id: normalizedDriverId } }
+    );
+    let trackingHealth = null;
+    try {
+      trackingHealth = await recordOrderTrackingHealthSnapshot({
+        orderId,
+        driverId: normalizedDriverId,
+        latitude: lat,
+        longitude: lng,
+        gpsEnabled,
+        locationPermission,
+        socketConnected,
+        appState,
+        metadata: {
+          source: "ORDER_DRIVER_LOCATION_LIVE",
+        },
+      });
+    } catch (_) {
+      trackingHealth = null;
+    }
     const payload = {
       orderId,
       driverId: normalizedDriverId,
@@ -2385,6 +2561,7 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
       status,
       locationUpdatedAt: new Date().toISOString(),
       eta,
+      trackingHealth: trackingHealth || undefined,
     };
 
     const io: Server = (req as any).io;
@@ -2400,6 +2577,73 @@ export const broadcastDriverLocationForDelivery = async (req: Request, res: Resp
     );
 
     return res.status(200).json({ success: true, data: { eta } });
+  } catch (error) {
+    return res.status(500).json({ success: false });
+  }
+};
+
+export const reportDriverTrackingHealth = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findByPk(orderId, { raw: true });
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Course introuvable" });
+    }
+
+    const requesterId = String(req.user?.id || "").trim();
+    const requesterRole = String(req.user?.role || "").trim().toLowerCase();
+    const assignedDriverId = String(order.driverId || "").trim();
+    if (!requesterId || !requesterRole) {
+      return res.status(401).json({ success: false, message: "Non authentifie" });
+    }
+
+    if (!["livreur", "admin", "sous-admin"].includes(requesterRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "Acces refuse: insufficient role",
+      });
+    }
+
+    const payload = req.body || {};
+    const resolvedDriverId = String(payload.driverId || assignedDriverId || "").trim();
+    if (!resolvedDriverId) {
+      return res.status(400).json({
+        success: false,
+        message: "driverId est requis pour enregistrer le suivi.",
+      });
+    }
+
+    if (requesterRole === "livreur" && requesterId !== resolvedDriverId) {
+      return res.status(403).json({
+        success: false,
+        message: "Vous ne pouvez pas mettre a jour le suivi d'une autre course.",
+      });
+    }
+
+    const trackingHealth = await recordOrderTrackingHealthSnapshot({
+      orderId,
+      driverId: resolvedDriverId,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      gpsEnabled: payload.gpsEnabled,
+      locationPermission: payload.locationPermission,
+      socketConnected: payload.socketConnected,
+      appState: payload.appState,
+      heartbeatAt: payload.heartbeatAt,
+      reasonCode: payload.reasonCode,
+      reasonLabel: payload.reasonLabel,
+      metadata: {
+        source: "TRACKING_HEALTH_REPORT",
+        ...(payload.metadata && typeof payload.metadata === "object"
+          ? payload.metadata
+          : {}),
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: { trackingHealth },
+    });
   } catch (error) {
     return res.status(500).json({ success: false });
   }

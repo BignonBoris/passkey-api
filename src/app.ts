@@ -27,9 +27,6 @@ const app = express();
 
 app.use(cors());
 app.use(helmet());
-app.get("/healthz", (_req, res) => {
-  res.status(200).json({ status: "ok" });
-});
 app.post("/api/payments/webhooks/fedapay", express.raw({ type: "application/json" }), handleFedaPayWebhook);
 app.post("/api/payments/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.use(express.json());
@@ -198,157 +195,161 @@ io.on("connection", (socket) => {
   });
 });
 
-setInterval(async () => {
-  try {
-    if (paymentPromptReminderLeadMs > 0) {
-      const reminderDeadline = new Date(Date.now() + paymentPromptReminderLeadMs);
-      const reminderOrders = await Order.findAll({
+const shouldStartPaymentPromptWatcher = process.env.RESET_DATABASE_ONLY !== "true";
+
+if (shouldStartPaymentPromptWatcher) {
+  setInterval(async () => {
+    try {
+      if (paymentPromptReminderLeadMs > 0) {
+        const reminderDeadline = new Date(Date.now() + paymentPromptReminderLeadMs);
+        const reminderOrders = await Order.findAll({
+          where: {
+            status: "ACCEPTED",
+            paymentPromptDeadlineAt: {
+              [Op.gt]: new Date(),
+              [Op.lte]: reminderDeadline,
+            },
+            paymentCheckoutStartedAt: null,
+          },
+        });
+
+        for (const order of reminderOrders) {
+          const orderId = String(order.get("id") || "").trim();
+          if (!orderId || paymentPromptReminderSent.has(orderId)) {
+            continue;
+          }
+          const payment = await Payment.findOne({
+            where: { orderId },
+            order: [["createdAt", "DESC"]],
+          });
+          const paymentMethod = String(payment?.get("method") || "CASH")
+            .trim()
+            .toUpperCase();
+          const paymentStatus = String(payment?.get("status") || "PENDING")
+            .trim()
+            .toUpperCase();
+          if (
+            !["MOBILE_MONEY", "CARD"].includes(paymentMethod) ||
+            paymentStatus === "PAID"
+          ) {
+            paymentPromptReminderSent.delete(orderId);
+            continue;
+          }
+
+          const deadline = new Date(String(order.get("paymentPromptDeadlineAt")));
+          const remainingSeconds = Math.max(
+            0,
+            Math.floor((deadline.getTime() - Date.now()) / 1000),
+          );
+          const reminderPayload = {
+            orderId,
+            status: "ACCEPTED",
+            payment_method: paymentMethod,
+            payment_status: paymentStatus,
+            paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
+            paymentCheckoutStartedAt: null,
+            paymentPromptAttemptCount: Number(
+              order.get("paymentPromptAttemptCount") || 0,
+            ),
+            paymentCheckoutStatus:
+              order.get("paymentCheckoutStatus") || "AWAITING_ACTION",
+            remainingSeconds,
+            message:
+              "Le paiement est toujours en attente. Finalisez-le avant l'expiration du delai.",
+          };
+
+          io.to(`user_${order.get("userId")}`).emit(
+            "payment_prompt_reminder",
+            reminderPayload,
+          );
+
+          const user = await User.findByPk(String(order.get("userId") || "").trim());
+          const userToken = String(user?.get("fcmToken") || "").trim();
+          if (userToken) {
+            await sendPushNotification(
+              userToken,
+              "Paiement en attente",
+              "Il vous reste peu de temps pour finaliser le paiement de votre course.",
+              {
+                type: "PAYMENT_PROMPT_REMINDER",
+                orderId,
+                route: "/maps",
+              },
+            );
+          }
+
+          paymentPromptReminderSent.add(orderId);
+        }
+      }
+
+      const expiredOrders = await Order.findAll({
         where: {
           status: "ACCEPTED",
-          paymentPromptDeadlineAt: {
-            [Op.gt]: new Date(),
-            [Op.lte]: reminderDeadline,
-          },
+          paymentPromptDeadlineAt: { [Op.lte]: new Date() },
           paymentCheckoutStartedAt: null,
         },
       });
 
-      for (const order of reminderOrders) {
+      for (const order of expiredOrders) {
         const orderId = String(order.get("id") || "").trim();
-        if (!orderId || paymentPromptReminderSent.has(orderId)) {
-          continue;
-        }
         const payment = await Payment.findOne({
           where: { orderId },
           order: [["createdAt", "DESC"]],
         });
-        const paymentMethod = String(payment?.get("method") || "CASH")
-          .trim()
-          .toUpperCase();
-        const paymentStatus = String(payment?.get("status") || "PENDING")
-          .trim()
-          .toUpperCase();
-        if (
-          !["MOBILE_MONEY", "CARD"].includes(paymentMethod) ||
-          paymentStatus === "PAID"
-        ) {
+        const paymentMethod = String(payment?.get("method") || "CASH").trim().toUpperCase();
+        const paymentStatus = String(payment?.get("status") || "PENDING").trim().toUpperCase();
+        if (!["MOBILE_MONEY", "CARD"].includes(paymentMethod) || paymentStatus === "PAID") {
           paymentPromptReminderSent.delete(orderId);
           continue;
         }
 
-        const deadline = new Date(String(order.get("paymentPromptDeadlineAt")));
-        const remainingSeconds = Math.max(
-          0,
-          Math.floor((deadline.getTime() - Date.now()) / 1000),
-        );
-        const reminderPayload = {
+        await order.update({
+          status: "CANCELLED",
+          cancelledAt: new Date(),
+          cancelledBy: "SYSTEM",
+          cancellationReason: "Paiement non lance avant expiration du delai.",
+          paymentPromptDeadlineAt: null,
+          paymentCheckoutStatus: "EXPIRED",
+        });
+
+        const driverId = String(order.get("driverId") || "").trim();
+        if (driverId) {
+          await User.update({ isAvailable: true }, { where: { id: driverId } });
+        }
+
+        const payload = {
           orderId,
-          status: "ACCEPTED",
+          status: "CANCELLED",
+          cancelledBy: "SYSTEM",
+          cancellationReason: "Le delai de paiement a expire avant l'ouverture du paiement.",
           payment_method: paymentMethod,
           payment_status: paymentStatus,
-          paymentPromptDeadlineAt: order.get("paymentPromptDeadlineAt") || null,
+          paymentPromptDeadlineAt: null,
           paymentCheckoutStartedAt: null,
           paymentPromptAttemptCount: Number(
             order.get("paymentPromptAttemptCount") || 0,
           ),
-          paymentCheckoutStatus:
-            order.get("paymentCheckoutStatus") || "AWAITING_ACTION",
-          remainingSeconds,
-          message:
-            "Le paiement est toujours en attente. Finalisez-le avant l'expiration du delai.",
+          paymentCheckoutStatus: "EXPIRED",
         };
 
-        io.to(`user_${order.get("userId")}`).emit(
-          "payment_prompt_reminder",
-          reminderPayload,
-        );
-
-        const user = await User.findByPk(String(order.get("userId") || "").trim());
-        const userToken = String(user?.get("fcmToken") || "").trim();
-        if (userToken) {
-          await sendPushNotification(
-            userToken,
-            "Paiement en attente",
-            "Il vous reste peu de temps pour finaliser le paiement de votre course.",
-            {
-              type: "PAYMENT_PROMPT_REMINDER",
-              orderId,
-              route: "/maps",
-            },
-          );
+        io.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);
+        if (driverId) {
+          io.to(`user_${driverId}`).emit("order_status_changed", payload);
         }
-
-        paymentPromptReminderSent.add(orderId);
-      }
-    }
-
-    const expiredOrders = await Order.findAll({
-      where: {
-        status: "ACCEPTED",
-        paymentPromptDeadlineAt: { [Op.lte]: new Date() },
-        paymentCheckoutStartedAt: null,
-      },
-    });
-
-    for (const order of expiredOrders) {
-      const orderId = String(order.get("id") || "").trim();
-      const payment = await Payment.findOne({
-        where: { orderId },
-        order: [["createdAt", "DESC"]],
-      });
-      const paymentMethod = String(payment?.get("method") || "CASH").trim().toUpperCase();
-      const paymentStatus = String(payment?.get("status") || "PENDING").trim().toUpperCase();
-      if (!["MOBILE_MONEY", "CARD"].includes(paymentMethod) || paymentStatus === "PAID") {
+        io.to("rides").emit("ride:updated", {
+          id: orderId,
+          orderId,
+          status: "CANCELLED",
+          driverId,
+          cancellationReason: payload.cancellationReason,
+        });
         paymentPromptReminderSent.delete(orderId);
-        continue;
       }
-
-      await order.update({
-        status: "CANCELLED",
-        cancelledAt: new Date(),
-        cancelledBy: "SYSTEM",
-        cancellationReason: "Paiement non lance avant expiration du delai.",
-        paymentPromptDeadlineAt: null,
-        paymentCheckoutStatus: "EXPIRED",
-      });
-
-      const driverId = String(order.get("driverId") || "").trim();
-      if (driverId) {
-        await User.update({ isAvailable: true }, { where: { id: driverId } });
-      }
-
-      const payload = {
-        orderId,
-        status: "CANCELLED",
-        cancelledBy: "SYSTEM",
-        cancellationReason: "Le delai de paiement a expire avant l'ouverture du paiement.",
-        payment_method: paymentMethod,
-        payment_status: paymentStatus,
-        paymentPromptDeadlineAt: null,
-        paymentCheckoutStartedAt: null,
-        paymentPromptAttemptCount: Number(
-          order.get("paymentPromptAttemptCount") || 0,
-        ),
-        paymentCheckoutStatus: "EXPIRED",
-      };
-
-      io.to(`user_${order.get("userId")}`).emit("order_status_changed", payload);
-      if (driverId) {
-        io.to(`user_${driverId}`).emit("order_status_changed", payload);
-      }
-      io.to("rides").emit("ride:updated", {
-        id: orderId,
-        orderId,
-        status: "CANCELLED",
-        driverId,
-        cancellationReason: payload.cancellationReason,
-      });
-      paymentPromptReminderSent.delete(orderId);
+    } catch (error) {
+      console.warn("payment prompt expiry watcher skipped:", error);
     }
-  } catch (error) {
-    console.warn("payment prompt expiry watcher skipped:", error);
-  }
-}, 15000);
+  }, 15000);
+}
 
 app.use((req, _res, next) => {
   (req as any).io = io;
