@@ -27,6 +27,9 @@ const app = express();
 
 app.use(cors());
 app.use(helmet());
+app.get("/healthz", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 app.post("/api/payments/webhooks/fedapay", express.raw({ type: "application/json" }), handleFedaPayWebhook);
 app.post("/api/payments/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.use(express.json());
