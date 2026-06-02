@@ -1615,8 +1615,22 @@ async function seedDefaultAdmin() {
   const phone = "0000000000";
   const name = "Admin";
 
-  const existing = await User.findOne({ where: { email } });
-  if (existing) return;
+  const existingByPhoneAndRole = await User.findOne({
+    where: {
+      phone,
+      role: "admin",
+    },
+  });
+  if (existingByPhoneAndRole) {
+    console.log("Default admin already exists, skipping seed:", phone);
+    return;
+  }
+
+  const existingByEmail = await User.findOne({ where: { email } });
+  if (existingByEmail) {
+    console.log("Default admin email already exists, skipping seed:", email);
+    return;
+  }
 
   const hashedPassword = await bcrypt.hash(password, 10);
   await User.create({
