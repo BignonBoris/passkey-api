@@ -5,6 +5,7 @@ import Order from "../../models/order.model";
 import User from "../../models/user.model";
 import Payment from "../../models/payment.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
+import { notifyAdmins } from "../../services/admin-notification.service";
 
 const DRIVER_INCIDENT_TYPES = [
   "CUSTOMER_UNREACHABLE",
@@ -49,6 +50,16 @@ function parseEvidence(input: unknown): string | null {
   } catch (_) {
     return null;
   }
+}
+
+type AdminNotificationSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+function resolveIncidentSeverity(priority: unknown): AdminNotificationSeverity {
+  const normalized = String(priority || "MEDIUM").trim().toUpperCase();
+  if (normalized === "CRITICAL") return "CRITICAL";
+  if (normalized === "HIGH") return "HIGH";
+  if (normalized === "LOW") return "LOW";
+  return "MEDIUM";
 }
 
 export async function listIncidents(req: Request, res: Response) {
@@ -112,7 +123,7 @@ export async function getIncident(req: Request, res: Response) {
   }
 }
 
-export async function createIncident(req: Request, res: Response) {
+export async function createIncident(req: AuthenticatedRequest, res: Response) {
   try {
     const { orderId, driverId, type, priority, description, reporterRole, latitude, longitude, evidence, resolutionNotes } = req.body || {};
     if (!type) return res.status(400).json({ success: false, message: "type is required" });
@@ -127,6 +138,26 @@ export async function createIncident(req: Request, res: Response) {
       latitude: parseCoordinate(latitude),
       longitude: parseCoordinate(longitude),
       evidenceJson: parseEvidence(evidence),
+    });
+
+    await notifyAdmins({
+      actorId: String(req.user?.id || "").trim() || null,
+      category: "INCIDENT",
+      severity: resolveIncidentSeverity(priority),
+      eventType: "INCIDENT_CREATED",
+      sourceModule: "INCIDENTS",
+      title: "Incident enregistre",
+      message: `Un incident ${String(type).trim().toUpperCase()} a ete enregistre${orderId ? ` pour la course ${String(orderId).trim()}` : ""}.`,
+      entityType: "Incident",
+      entityId: String(row.get("id") || "").trim(),
+      actionUrl: "/admin/incidents",
+      payload: {
+        incidentId: String(row.get("id") || "").trim(),
+        orderId: orderId || null,
+        driverId: driverId || null,
+        priority: resolveIncidentSeverity(priority),
+        type: normalizeIncidentType(type),
+      },
     });
     return res.status(201).json({ success: true, data: row });
   } catch (error: any) {
@@ -180,6 +211,27 @@ export async function reportDriverIncident(req: AuthenticatedRequest, res: Respo
       latitude: parseCoordinate(req.body?.latitude),
       longitude: parseCoordinate(req.body?.longitude),
       evidenceJson: parseEvidence(req.body?.evidence),
+    });
+
+    await notifyAdmins({
+      actorId: driverId,
+      category: "INCIDENT",
+      severity: resolveIncidentSeverity(req.body?.priority || "HIGH"),
+      eventType: "DRIVER_INCIDENT_REPORTED",
+      sourceModule: "INCIDENTS",
+      title: "Incident declare par un livreur",
+      message: `Le livreur a signale un incident de type ${type} pour la course ${orderId}.`,
+      entityType: "Incident",
+      entityId: String(row.get("id") || "").trim(),
+      actionUrl: "/admin/incidents",
+      payload: {
+        incidentId: String(row.get("id") || "").trim(),
+        orderId,
+        driverId,
+        type,
+        priority: String(req.body?.priority || "HIGH").trim().toUpperCase(),
+        description,
+      },
     });
 
     return res.status(201).json({
@@ -269,6 +321,27 @@ export async function reportCashUnpaidIncident(req: AuthenticatedRequest, res: R
       latitude: parseCoordinate(req.body?.latitude),
       longitude: parseCoordinate(req.body?.longitude),
       evidenceJson: parseEvidence(evidence),
+    });
+
+    await notifyAdmins({
+      actorId: driverId,
+      category: "PAYMENT",
+      severity: "CRITICAL",
+      eventType: "CASH_UNPAID_REPORTED",
+      sourceModule: "INCIDENTS",
+      title: "Course cash non payee",
+      message: `Le livreur a signale une course cash non payee pour la course ${orderId}.`,
+      entityType: "Incident",
+      entityId: String(row.get("id") || "").trim(),
+      actionUrl: "/admin/incidents",
+      payload: {
+        incidentId: String(row.get("id") || "").trim(),
+        orderId,
+        driverId,
+        paymentMethod,
+        paymentStatus,
+        description,
+      },
     });
 
     return res.status(201).json({

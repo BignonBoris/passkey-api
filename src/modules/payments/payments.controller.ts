@@ -27,6 +27,7 @@ import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
 import { resolveCountryId } from "../../services/country.service";
 import { startDriverSearchForOrder } from "../order/order.controller";
 import { shouldStartDeferredSearchAfterPayment } from "../order/order-payment-flow.service";
+import { notifyAdmins } from "../../services/admin-notification.service";
 
 function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
@@ -59,6 +60,48 @@ function canAccessOrderPayment(params: {
   }
 
   return ["admin", "sous-admin"].includes(requesterRole);
+}
+
+type AdminNotificationSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+async function notifyPaymentAdmins(params: {
+  payment: Payment;
+  order: Order;
+  eventType: string;
+  title: string;
+  message: string;
+  severity?: AdminNotificationSeverity;
+  category?: string;
+  sourceModule?: string;
+  actionUrl?: string | null;
+  payload?: Record<string, unknown> | null;
+}) {
+  const orderId = String(params.order.get("id") || "").trim();
+  const paymentId = String(params.payment.get("id") || "").trim();
+  if (!orderId || !paymentId) return [];
+
+  return notifyAdmins({
+    category: params.category || "PAYMENT",
+    severity: params.severity || "MEDIUM",
+    eventType: params.eventType,
+    sourceModule: params.sourceModule || "PAYMENTS",
+    title: params.title,
+    message: params.message,
+    entityType: "Payment",
+    entityId: paymentId,
+    actionUrl: params.actionUrl || "/admin/refunds",
+    payload: {
+      paymentId,
+      orderId,
+      userId: String(params.payment.get("userId") || params.order.get("userId") || "").trim(),
+      driverId: String(params.payment.get("driverId") || params.order.get("driverId") || "").trim(),
+      paymentStatus: String(params.payment.get("status") || "").trim().toUpperCase(),
+      paymentMethod: String(params.payment.get("method") || "").trim().toUpperCase(),
+      amount: Number(params.payment.get("amount") || params.order.get("price") || 0),
+      currency: String(params.payment.get("currency") || "XOF").trim() || "XOF",
+      ...params.payload,
+    },
+  });
 }
 
 function generateCompletionOtp() {
@@ -432,6 +475,21 @@ async function reconcileOrderAfterPaymentUpdate(
         cancellationPayload,
       );
     }
+    await notifyPaymentAdmins({
+      payment,
+      order,
+      eventType: "PAYMENT_FAILED_FINAL",
+      title: "Paiement echoue",
+      message: `Le paiement de la course ${String(order.get("publicCode") || "").trim() || String(order.get("id") || "").trim()} a echoue apres deux tentatives.`,
+      severity: "CRITICAL",
+      category: "PAYMENT",
+      sourceModule: "PAYMENTS",
+      actionUrl: "/admin/rides",
+      payload: {
+        attemptCount,
+        paymentCheckoutStatus: "FAILED_FINAL",
+      },
+    });
     return;
   }
 
@@ -505,6 +563,23 @@ async function cancelExpiredAcceptedOrderAfterCheckoutClose(
   if (driverId) {
     io?.to(`user_${driverId}`).emit("order_status_changed", payload);
   }
+
+  await notifyPaymentAdmins({
+    payment,
+    order,
+    eventType: "PAYMENT_EXPIRED",
+    title: "Delai de paiement expire",
+    message: `Le delai de paiement de la course ${String(order.get("publicCode") || "").trim() || String(order.get("id") || "").trim()} a expire avant confirmation.`,
+    severity: "HIGH",
+    category: "PAYMENT",
+    sourceModule: "PAYMENTS",
+    actionUrl: "/admin/rides",
+    payload: {
+      paymentCheckoutStatus: "EXPIRED",
+      paymentPromptAttemptCount: Number(order.get("paymentPromptAttemptCount") || 0),
+      deadlineExpired: true,
+    },
+  });
 
   return true;
 }

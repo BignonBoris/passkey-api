@@ -9,6 +9,7 @@ import { AuthenticatedRequest } from "../../types/auth-request";
 import { resolveCountryId } from "../../services/country.service";
 import { SmsService } from "../../services/sms/sms.service";
 import { sendPushNotification } from "../../services/notification.service";
+import { notifyAdmins } from "../../services/admin-notification.service";
 
 const REQUIRED_DRIVER_DOC_TYPES = [
   "ID_CARD",
@@ -34,6 +35,8 @@ function buildPublicDocumentUrl(req: Request, storedName: string) {
   const protocol = req.protocol || "http";
   return `${protocol}://${host}/uploads/driver-documents/${storedName}`;
 }
+
+type AdminNotificationSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 async function upsertDriverDocument(params: {
   userId: string;
@@ -530,6 +533,29 @@ export async function submitMyDriverOnboarding(req: AuthenticatedRequest, res: R
       });
     }
 
+    const driverName = String(currentUser?.get("name") || "").trim();
+    const driverPhone = String(currentUser?.get("phone") || "").trim();
+
+    await notifyAdmins({
+      actorId: String(req.user.id || "").trim() || null,
+      category: "DRIVER",
+      severity: "HIGH",
+      eventType: "DRIVER_ONBOARDING_SUBMITTED",
+      sourceModule: "DRIVER_DOCUMENTS",
+      title: "Nouveau dossier livreur",
+      message: `Un nouveau dossier livreur a ete soumis${driverName ? ` par ${driverName}` : ""}.`,
+      entityType: "User",
+      entityId: String(req.user.id || "").trim(),
+      actionUrl: "/admin/drivers/kyc",
+      payload: {
+        userId: String(req.user.id || "").trim(),
+        driverName,
+        driverPhone,
+        onboardingState: "PENDING",
+        documentCount: createdDocuments.length,
+      },
+    });
+
     return res.status(201).json({
       success: true,
       message: "Driver onboarding submitted",
@@ -699,6 +725,26 @@ export async function updateMyDriverOnboarding(req: AuthenticatedRequest, res: R
         });
       }
     }
+
+    await notifyAdmins({
+      actorId: String(req.user.id || "").trim() || null,
+      category: "DRIVER",
+      severity: "MEDIUM",
+      eventType: "DRIVER_ONBOARDING_UPDATED",
+      sourceModule: "DRIVER_DOCUMENTS",
+      title: "Dossier livreur mis a jour",
+      message: `Le livreur ${String(user.get("name") || "").trim() || String(req.user.id || "").trim()} a mis a jour son dossier.`,
+      entityType: "User",
+      entityId: String(req.user.id || "").trim(),
+      actionUrl: "/admin/drivers/kyc",
+      payload: {
+        userId: String(req.user.id || "").trim(),
+        driverName: String(user.get("name") || "").trim(),
+        driverPhone: String(user.get("phone") || "").trim(),
+        onboardingState: "PENDING",
+        documentsUpdated: createdDocuments.length,
+      },
+    });
 
     return res.status(200).json({
       success: true,

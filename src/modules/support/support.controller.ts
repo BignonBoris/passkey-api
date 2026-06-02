@@ -7,6 +7,7 @@ import User from "../../models/user.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { PRIVILEGED_ROLES } from "../../constants/roles";
 import { sendPushNotification } from "../../services/notification.service";
+import { notifyAdmins } from "../../services/admin-notification.service";
 
 const ARCHIVED_CATEGORY_PREFIX = "ARCHIVED|";
 
@@ -37,6 +38,16 @@ function extractCategory(category: unknown) {
   }
   const raw = String(category).slice(ARCHIVED_CATEGORY_PREFIX.length);
   return raw || null;
+}
+
+type AdminNotificationSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+function resolveSupportSeverity(priority: unknown): AdminNotificationSeverity {
+  const normalized = String(priority || "MEDIUM").trim().toUpperCase();
+  if (normalized === "CRITICAL") return "CRITICAL";
+  if (normalized === "HIGH") return "HIGH";
+  if (normalized === "LOW") return "LOW";
+  return "MEDIUM";
 }
 
 function mapTicketForResponse(ticket: any) {
@@ -262,6 +273,28 @@ export async function createSupportTicket(req: AuthenticatedRequest, res: Respon
         },
       ],
     });
+
+    const prioritySeverity = resolveSupportSeverity(priority);
+    await notifyAdmins({
+      actorId: auth.id,
+      category: "SUPPORT",
+      severity: prioritySeverity,
+      eventType: "SUPPORT_TICKET_CREATED",
+      sourceModule: "SUPPORT",
+      title: "Nouveau ticket support",
+      message: `Un ticket support${subject ? ` - ${String(subject).trim()}` : ""} a ete cree${orderId ? ` pour la course ${String(orderId).trim()}` : ""}.`,
+      entityType: "SupportTicket",
+      entityId: String(row.get("id") || "").trim(),
+      actionUrl: "/admin/support/tickets",
+      payload: {
+        ticketId: String(row.get("id") || "").trim(),
+        orderId: orderId || null,
+        priority: String(priority || "MEDIUM").trim().toUpperCase(),
+        category: normalizedCategory || null,
+        subject: subject || null,
+        senderRole: auth.role,
+      },
+    });
     return res.status(201).json({ success: true, data: hydrated ? mapTicketForResponse(hydrated) : null });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message || "Failed to create support ticket" });
@@ -483,6 +516,28 @@ export async function postSupportTicketMessage(req: AuthenticatedRequest, res: R
       ticket.set("status", "PENDING");
     }
     await ticket.save();
+
+    if (!isAdmin) {
+      await notifyAdmins({
+        actorId: auth.id,
+        category: "SUPPORT",
+        severity: resolveSupportSeverity(ticket.get("priority")),
+        eventType: "SUPPORT_TICKET_REPLIED",
+        sourceModule: "SUPPORT",
+        title: "Nouveau message support",
+        message: `Le ticket ${ticketId} a recu un nouveau message de l'utilisateur.`,
+        entityType: "SupportTicket",
+        entityId: ticketId,
+        actionUrl: "/admin/support/tickets",
+        payload: {
+          ticketId,
+          senderId: auth.id,
+          senderRole: auth.role,
+          messagePreview: messageText.slice(0, 160),
+          priority: String(ticket.get("priority") || "MEDIUM").trim().toUpperCase(),
+        },
+      });
+    }
 
     const requester = await User.findByPk(String(ticket.get("userId")), { attributes: ["id", "fcmToken"], raw: true });
     const sender = await User.findByPk(auth.id, { attributes: ["id", "name", "phone", "role"], raw: true });

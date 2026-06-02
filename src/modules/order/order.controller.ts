@@ -43,6 +43,7 @@ import {
   getOrderTrackingHealthSnapshot,
   recordOrderTrackingHealthSnapshot,
 } from "../../services/order-tracking-health.service";
+import { notifyAdmins } from "../../services/admin-notification.service";
 
 const DELIVERY_STATUSES = [
   "PENDING",
@@ -90,6 +91,51 @@ const SIMULATE_DRIVER_FOUND_DELAY_MS = Math.max(
   1000,
   Number(process.env.SIMULATE_DRIVER_FOUND_DELAY_MS || 6000) || 6000,
 );
+
+type AdminNotificationSeverity = "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+async function notifyOrderAdmins(params: {
+  order: Order;
+  eventType: string;
+  title: string;
+  message: string;
+  severity?: AdminNotificationSeverity;
+  category?: string;
+  sourceModule?: string;
+  actorId?: string | null;
+  entityType?: string | null;
+  actionUrl?: string | null;
+  payload?: Record<string, unknown> | null;
+}) {
+  const { order } = params;
+  const orderId = String(order.get("id") || "").trim();
+  if (!orderId) return [];
+
+  return notifyAdmins({
+    actorId: params.actorId || null,
+    category: params.category || "ORDER",
+    severity: params.severity || "MEDIUM",
+    eventType: params.eventType,
+    sourceModule: params.sourceModule || "ORDER",
+    title: params.title,
+    message: params.message,
+    entityType: params.entityType || "Order",
+    entityId: orderId,
+    actionUrl: params.actionUrl || "/admin/rides",
+    payload: {
+      orderId,
+      publicCode: String(order.get("publicCode") || "").trim(),
+      status: String(order.get("status") || "").trim().toUpperCase(),
+      userId: String(order.get("userId") || "").trim(),
+      driverId: String(order.get("driverId") || "").trim(),
+      pickupAddress: String(order.get("pickupAddress") || "").trim(),
+      destinationAddress: String(order.get("destinationAddress") || "").trim(),
+      price: Number(order.get("price") || 0),
+      currency: "XOF",
+      ...params.payload,
+    },
+  });
+}
 
 type DeliveryEtaPayload = {
   remainingSeconds: number;
@@ -455,6 +501,28 @@ async function createRefundRequestForCancelledRemotePayment(params: {
     status: "PENDING",
   });
 
+  await notifyAdmins({
+    actorId: null,
+    category: "PAYMENT",
+    severity: "HIGH",
+    eventType: "REFUND_REQUEST_CREATED",
+    sourceModule: "PAYMENTS",
+    title: "Nouvelle demande de remboursement",
+    message: `Une demande de remboursement a ete creee pour la course ${String(params.order.get("publicCode") || "").trim() || orderId}.`,
+    entityType: "RefundRequest",
+    entityId: String(refundRequest.get("id") || "").trim(),
+    actionUrl: "/admin/refunds",
+    payload: {
+      refundRequestId: String(refundRequest.get("id") || "").trim(),
+      paymentId,
+      orderId,
+      userId,
+      amount,
+      cancelledBy: actor,
+      cancellationReason: cancellationReason || null,
+    },
+  });
+
   return { created: true, refundRequest };
 }
 
@@ -590,6 +658,25 @@ async function cancelOrderAndBroadcast(params: {
       orderId,
     });
   }
+
+  const cancellationSeverity: AdminNotificationSeverity =
+    cancelledBy === "SYSTEM" ? "HIGH" : cancelledBy === "ADMIN" ? "LOW" : "MEDIUM";
+  await notifyOrderAdmins({
+    order,
+    eventType: "ORDER_CANCELLED",
+    title: "Course annulee",
+    message: `${cancellationMessage}${reasonSuffix}`.trim(),
+    severity: cancellationSeverity,
+    payload: {
+      cancelledBy,
+      cancellationReason: reason || null,
+      cancellationFee: waiveFees ? 0 : Number(order.get("cancellationFee") || 0),
+      refundRequestCreated: refundResult.created,
+      refundRequestId: refundResult.refundRequest
+        ? String(refundResult.refundRequest.get("id") || "").trim()
+        : "",
+    },
+  });
 
   return {
     refundRequestCreated: refundResult.created,
@@ -1245,6 +1332,19 @@ async function notifyNearbyDrivers(order: Order, io: Server, pricing: any, payme
   });
 
   console.log(`[RÉSULTAT] ${nearbyDrivers.length} livreurs vont recevoir l'appel de course.\n`);
+  if (nearbyDrivers.length === 0) {
+    await notifyOrderAdmins({
+      order,
+      eventType: "ORDER_SEARCH_NO_DRIVER",
+      title: "Aucun livreur disponible",
+      message: `La course ${String(order.get("publicCode") || "").trim() || String(order.get("id") || "").trim()} n'a trouvé aucun livreur dans le rayon de recherche.`,
+      severity: "HIGH",
+      payload: {
+        radiusKm,
+        notifiedDriversCount: 0,
+      },
+    });
+  }
 
   const driverSnapshots: SearchDriverSnapshot[] = nearbyDrivers.map((driver) => ({
     id: String(driver.get('id') || '').trim(),
@@ -1379,6 +1479,21 @@ export const createOrder = async (req: Request, res: Response) => {
       }
     }
     io.to('rides').emit('ride:created', newOrder);
+    await notifyOrderAdmins({
+      order: newOrder,
+      eventType: "ORDER_CREATED",
+      title: "Nouvelle course creee",
+      message: `La course ${String(newOrder.get("publicCode") || "").trim()} a ete creee.`,
+      severity: "MEDIUM",
+      actorId: String(userId || "").trim() || null,
+      payload: {
+        paymentMethod,
+        pricingSnapshot: pricing?.snapshot ?? null,
+        notifiedDriversCount: notifiedDriversPayload.length,
+        searchRadiusKm,
+        simulationMode: Boolean(simulationMode),
+      },
+    });
     return res.status(201).json({
       success: true,
       order: newOrder,
@@ -1933,6 +2048,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     });
     if (status === 'NO_DRIVER_FOUND') {
       await markOrderSearchFailed(orderId);
+      await notifyOrderAdmins({
+        order: orderForEvents,
+        eventType: "ORDER_NO_DRIVER_FOUND",
+        title: "Aucun livreur trouve",
+        message: `La course ${String(orderForEvents.get("publicCode") || "").trim()} n'a trouve aucun livreur disponible.`,
+        severity: "HIGH",
+        payload: {
+          paymentMethod,
+          paymentStatus,
+          searchStartedAt: orderForEvents.get("searchStartedAt") || null,
+        },
+      });
     }
     if (status === 'PENDING' && previousStatus === 'NO_DRIVER_FOUND') {
       const paymentRow = await Payment.findOne({
@@ -2200,6 +2327,19 @@ export const createDeliveryRequest = async (req: Request, res: Response) => {
     });
     const io: Server = (req as any).io;
     notifyNearbyDrivers(newOrder, io, pricing, paymentRow).catch(console.error);
+    await notifyOrderAdmins({
+      order: newOrder,
+      eventType: "ORDER_CREATED",
+      title: "Nouvelle course creee",
+      message: `La course ${String(newOrder.get("publicCode") || "").trim()} a ete creee.`,
+      severity: "MEDIUM",
+      actorId: String(userId || "").trim() || null,
+      payload: {
+        paymentMethod,
+        pricingSnapshot: pricing?.snapshot ?? null,
+        flowType: "LEGACY_DELIVERY",
+      },
+    });
     return res.status(201).json({ success: true, order: newOrder });
   } catch (error) { return res.status(500).json({ success: false }); }
 };
