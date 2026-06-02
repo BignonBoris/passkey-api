@@ -31,6 +31,9 @@ app.post("/api/payments/webhooks/fedapay", express.raw({ type: "application/json
 app.post("/api/payments/webhooks/stripe", express.raw({ type: "application/json" }), handleStripeWebhook);
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+app.get("/healthz", (_req, res) => {
+  res.status(200).send("ok");
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {

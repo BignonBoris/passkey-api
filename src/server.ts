@@ -53,52 +53,60 @@ import { ensureDefaultCountries } from "./services/country.service";
 // const PORT = process.env.PORT || 3000;
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+async function bootstrapDatabase() {
+  // Keep the schema/bootstrap work in one place so Render can skip it when needed.
+  await ensureCountryColumnsExist();
+  await ensureRiderColumnsExist();
+  if (process.env.REBUILD_VEHICLE_PRICING_CONFIG_TABLES === "true") {
+    await cleanupVehiclePricingConstraints();
+  }
+
+  await sequelize.sync();
+
+  await ensureCountrySchema();
+  await ensureCountryDistanceColumns();
+  await ensureDefaultCountries();
+  await ensureOrderArchiveColumn();
+  await ensureOrderOtpColumns();
+  await ensureOrderPublicCodeColumn();
+  await ensureOrderPaymentPromptColumns();
+  await ensureOrderRevenueColumns();
+  await ensureOrderPricingColumns();
+  await ensureReturnOrderColumns();
+  await ensureOrderRatingColumns();
+  await ensureOrderSearchStatsColumns();
+  await ensureUserRefreshTokenColumn();
+  await ensureIncidentSchema();
+  await ensureFoodOrderColumns();
+  await ensurePricingRulesTable();
+  await ensurePaymentSchema();
+  await ensureDriverRevenueConfigSchema();
+  await ensureSupportSchema();
+  await seedSupportTicketCategories();
+  await ensureFoodCatalogSchema();
+  await seedVehicleTypes();
+  await ensureDefaultAppSettings();
+  await seedDefaultAdmin();
+  await seedFoodHomeData();
+}
+
 async function startServer() {
   try {
     const shouldResetDatabase = process.env.RESET_DATABASE === "true";
     const shouldExitAfterReset = process.env.RESET_DATABASE_ONLY === "true";
+    const shouldBootstrapOnStart = process.env.DB_BOOTSTRAP_ON_START !== "false";
+
+    await sequelize.authenticate();
 
     if (shouldResetDatabase) {
       await resetDatabase();
-    } else {
-      // 1. First ensure critical columns exist in tables that might already be there
-      // without the countryId field (which causes sync errors on unique indexes)
-      await ensureCountryColumnsExist();
-      await ensureRiderColumnsExist();
-      if (process.env.REBUILD_VEHICLE_PRICING_CONFIG_TABLES === "true") {
-        await cleanupVehiclePricingConstraints();
-      }
-
-      // 2. Sync all models/indexes
-      await sequelize.sync();
     }
 
-    // 3. Complete the rest of the schema adjustments
-    await ensureCountrySchema();
-    await ensureCountryDistanceColumns();
-    await ensureDefaultCountries();
-    await ensureOrderArchiveColumn();
-    await ensureOrderOtpColumns();
-    await ensureOrderPublicCodeColumn();
-    await ensureOrderPaymentPromptColumns();
-    await ensureOrderRevenueColumns();
-    await ensureOrderPricingColumns();
-    await ensureReturnOrderColumns();
-    await ensureOrderRatingColumns();
-    await ensureOrderSearchStatsColumns();
-    await ensureUserRefreshTokenColumn();
-    await ensureIncidentSchema();
-    await ensureFoodOrderColumns();
-    await ensurePricingRulesTable();
-    await ensurePaymentSchema();
-    await ensureDriverRevenueConfigSchema();
-    await ensureSupportSchema();
-    await seedSupportTicketCategories();
-    await ensureFoodCatalogSchema();
-    await seedVehicleTypes();
-    await ensureDefaultAppSettings();
-    await seedDefaultAdmin();
-    await seedFoodHomeData();
+    if (shouldResetDatabase || shouldBootstrapOnStart) {
+      await bootstrapDatabase();
+    } else {
+      console.log("[bootstrap] DB_BOOTSTRAP_ON_START=false, skipping startup migrations.");
+    }
 
     if (shouldExitAfterReset) {
       console.log("[migration] RESET_DATABASE_ONLY=true, server not started.");
@@ -106,11 +114,12 @@ async function startServer() {
       return;
     }
 
-    server.listen(PORT, () => {
-      console.log(`API running on http://localhost:${PORT}`);
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`API running on http://0.0.0.0:${PORT}`);
     });
   } catch (error) {
-    console.error("Database sync failed:", error);
+    console.error("Server startup failed:", error);
+    process.exit(1);
   }
 }
 

@@ -2,12 +2,13 @@
   "name": "api",
   "version": "1.0.0",
   "description": "e-Cheetah Backend API",
-  "main": "dist/server.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "nodemon",
     "db:reset": "node ./scripts/run-db-reset.js",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "render-build": "npm run build",
+    "start": "node dist/src/server.js"
   },
   "type": "commonjs",
   "dependencies": {
