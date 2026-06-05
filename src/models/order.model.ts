@@ -13,6 +13,8 @@ class Order extends Model {
   public driverVehicleId?: string;
   public parentOrderId?: string | null;
   public returnOrderId?: string | null;
+  public pickupOtp!: string;
+  public pickupOtpValidatedAt?: Date | null;
   public completionOtp!: string;
   public searchStartedAt!: Date;
   public paymentPromptDeadlineAt?: Date | null;
@@ -109,6 +111,14 @@ Order.init(
     },
     returnOrderId: {
       type: DataTypes.UUID,
+      allowNull: true,
+    },
+    pickupOtp: {
+      type: DataTypes.STRING(6),
+      allowNull: false,
+    },
+    pickupOtpValidatedAt: {
+      type: DataTypes.DATE,
       allowNull: true,
     },
     completionOtp: {

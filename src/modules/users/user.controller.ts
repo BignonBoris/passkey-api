@@ -13,6 +13,7 @@ import {
 import { resolveCountryFromCoordinates } from "../../services/country.service";
 import Country from "../../models/country.model";
 import DriverAccount from "../../models/driver-account.model";
+import { getOrCreateUserWalletAccount } from "../wallet/wallet.service";
 import { generateOTP } from "../../utils/otp";
 import { SmsService } from "../../services/sms/sms.service";
 import Order from "../../models/order.model";
@@ -126,10 +127,26 @@ export const getMyProfile = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ success: false, message: "Utilisateur introuvable" });
     }
 
+    const userRole = String(user.get("role") || "").trim().toLowerCase();
+    const wallet =
+      userRole === "usager"
+        ? await getOrCreateUserWalletAccount(userId)
+        : null;
+
+    const safeUser = toSafeUser(user);
+
     return res.status(200).json({
       success: true,
       message: "Profile loaded",
-      data: user,
+      data: {
+        ...safeUser,
+        wallet,
+        walletBalance: wallet?.balance ?? null,
+        walletCurrency: wallet?.currency ?? null,
+        walletUpdatedAt: wallet?.updatedAt ?? null,
+        walletIsNegative: wallet?.isNegative ?? null,
+        walletAvailableBalance: wallet?.availableBalance ?? null,
+      },
     });
   } catch (error: any) {
     return res.status(500).json({

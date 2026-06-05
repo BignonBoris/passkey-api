@@ -31,6 +31,7 @@ import {
   confirmCancelAfterPickup,
   getCancelAfterPickupQuote,
 } from "../../services/return-order.service";
+import { creditUserWallet } from "../wallet/wallet.service";
 import { SmsService } from "../../services/sms/sms.service";
 import { nomalizeCustomerPhone } from "../../utils/phoneNormalize";
 import { generateUniqueOrderPublicCode } from "../../utils/orderPublicCode";
@@ -239,12 +240,25 @@ function normalizePublicMediaUrl(rawValue: unknown): string {
   return raw;
 }
 
-function generateCompletionOtp(): string {
+function generateDeliveryOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function generateCompletionOtp(): string {
+  return generateDeliveryOtp();
+}
+
+function generatePickupOtp(): string {
+  return generateDeliveryOtp();
 }
 
 function normalizeOtp(value: unknown): string {
   return String(value || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function hasUsableOtp(value: unknown): boolean {
+  const normalized = normalizeOtp(value);
+  return normalized.length === 6 && normalized !== "000000";
 }
 
 function normalizeDeliveryStatus(value: unknown): string {
@@ -469,6 +483,16 @@ async function createRefundRequestForCancelledRemotePayment(params: {
   }
   if (!Number.isFinite(amount) || amount <= 0) return { created: false };
 
+  const refundActor = String(params.cancelledBy || "").trim().toUpperCase() || "SYSTEM";
+  const refundCancellationReason = String(params.cancellationReason || "").trim();
+  const refundReasonParts = [
+    "Demande de remboursement creee automatiquement apres annulation d'une course payee.",
+    `Origine: ${refundActor}.`,
+  ];
+  if (refundCancellationReason) {
+    refundReasonParts.push(`Motif: ${refundCancellationReason}`);
+  }
+
   const existing = await RefundRequest.findOne({
     where: {
       paymentId,
@@ -479,6 +503,29 @@ async function createRefundRequestForCancelledRemotePayment(params: {
     },
   });
   if (existing) {
+    try {
+      await creditUserWallet({
+        userId,
+        orderId,
+        type: "CREDIT_REFUND",
+        amount,
+        reason: refundReasonParts.join(" ").trim(),
+        idempotencyKey: `${orderId}:online_cancel_refund`,
+        createdByType: "SYSTEM",
+        sourceStatus: "CANCELLED",
+        metadata: {
+          paymentId,
+          refundRequestId: String(existing.get("id") || "").trim(),
+          cancelledBy: refundActor,
+          cancellationReason: refundCancellationReason || null,
+        },
+      });
+    } catch (walletError) {
+      console.warn(
+        `[wallet] impossible de crediter le compte usager pour l'annulation payee de la course ${orderId}:`,
+        walletError,
+      );
+    }
     return { created: false, refundRequest: existing };
   }
 
@@ -500,6 +547,30 @@ async function createRefundRequestForCancelledRemotePayment(params: {
     reason: reasonParts.join(" ").trim(),
     status: "PENDING",
   });
+
+  try {
+    await creditUserWallet({
+      userId,
+      orderId,
+      type: "CREDIT_REFUND",
+      amount,
+      reason: reasonParts.join(" ").trim(),
+      idempotencyKey: `${orderId}:online_cancel_refund`,
+      createdByType: "SYSTEM",
+      sourceStatus: "CANCELLED",
+      metadata: {
+        paymentId,
+        refundRequestId: String(refundRequest.get("id") || "").trim(),
+        cancelledBy: actor,
+        cancellationReason: cancellationReason || null,
+      },
+    });
+  } catch (walletError) {
+    console.warn(
+      `[wallet] impossible de crediter le compte usager pour l'annulation payee de la course ${orderId}:`,
+      walletError,
+    );
+  }
 
   await notifyAdmins({
     actorId: null,
@@ -1443,6 +1514,8 @@ export const createOrder = async (req: Request, res: Response) => {
       userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress,
       price: pricing.price, distance, revenuePerDelivery: pricing.driverEarnings,
       platformCommission: pricing.platformCommission, serviceFee: pricing.serviceFee,
+      pickupOtp: generatePickupOtp(),
+      pickupOtpValidatedAt: null,
       completionOtp: generateCompletionOtp(), vehicleType: vehicleId, status: "PENDING",
       deliveryPhone,
       searchStartedAt: new Date(),
@@ -1498,6 +1571,7 @@ export const createOrder = async (req: Request, res: Response) => {
       success: true,
       order: newOrder,
       payment: paymentRow,
+      pickupOtp: String(newOrder.get('pickupOtp') || ''),
       completionOtp: String(newOrder.get('completionOtp') || ''),
       notifiedDrivers: notifiedDriversPayload,
       searchRadiusKm,
@@ -1512,10 +1586,26 @@ export const driverArrivedPickup = async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const order = await Order.findByPk(orderId);
     if (!order) return res.status(404).json({ success: false, message: "Course introuvable" });
-    await order.update({ driverArrivedPickupAt: new Date(), status: "DRIVER_ARRIVED_PICKUP" });
+    let pickupOtp = String(order.get("pickupOtp") || "").trim();
+    if (!hasUsableOtp(pickupOtp)) {
+      pickupOtp = generatePickupOtp();
+      await order.update({
+        pickupOtp,
+        pickupOtpValidatedAt: null,
+      });
+    }
+    await order.update({
+      driverArrivedPickupAt: new Date(),
+      status: "DRIVER_ARRIVED_PICKUP",
+    });
     await notifyUserDeliveryStep(order, { title: "Livreur arrive", body: "Votre livreur est arrive.", type: "DRIVER_ARRIVED_PICKUP" });
     const io: Server = (req as any).io;
-    io.to(`user_${order.get('userId')}`).emit("order_status_changed", { orderId, status: "DRIVER_ARRIVED_PICKUP", driverId: order.get('driverId') });
+    io.to(`user_${order.get('userId')}`).emit("order_status_changed", {
+      orderId,
+      status: "DRIVER_ARRIVED_PICKUP",
+      driverId: order.get('driverId'),
+      pickupOtp,
+    });
     io.to("rides").emit("ride:updated", {
       id: orderId,
       orderId,
@@ -1533,9 +1623,28 @@ export const driverLeftPickup = async (req: Request, res: Response) => {
     const { orderId } = req.params;
     const order = await Order.findByPk(orderId);
     if (!order) return res.status(404).json({ success: false });
+    const providedPickupOtp = normalizeOtp(req.body?.pickupOtp);
+    const storedPickupOtp = normalizeOtp(order.get("pickupOtp"));
+    if (!hasUsableOtp(storedPickupOtp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Code de retrait indisponible.",
+      });
+    }
+    if (providedPickupOtp !== storedPickupOtp) {
+      return res.status(400).json({
+        success: false,
+        message: "Code de retrait invalide.",
+      });
+    }
     const waitingAt = order.get('driverArrivedPickupAt') as Date | null;
     const waiting = await calculateWaitingFees(waitingAt ?? new Date(), new Date(), String(order.get('countryId') || ""));
-    await order.update({ status: "DRIVER_LEFT_PICKUP", driverLeftPickupAt: new Date(), waitingFee: waiting.waitingFee });
+    await order.update({
+      status: "DRIVER_LEFT_PICKUP",
+      driverLeftPickupAt: new Date(),
+      waitingFee: waiting.waitingFee,
+      pickupOtpValidatedAt: new Date(),
+    });
     await notifyUserDeliveryStep(order, { title: "Livraison demarree", body: "Le livreur a recupere le colis.", type: "DRIVER_LEFT_PICKUP" });
     const io: Server = (req as any).io;
     io.to(`user_${order.get('userId')}`).emit("order_status_changed", { orderId, status: "DRIVER_LEFT_PICKUP", driverId: order.get('driverId') });
@@ -1636,6 +1745,7 @@ export const confirmCancelAfterPickupFlow = async (req: Request, res: Response) 
     const result = await confirmCancelAfterPickup({
       orderId,
       cancellationReason: req.body?.cancellationReason,
+      paymentMethod: req.body?.paymentMethod,
     });
 
     if (!result.returnOrder) {
@@ -2009,7 +2119,23 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     if (status === "COMPLETED") {
       const providedOtp = normalizeOtp(completionOtp);
       const storedOtp = normalizeOtp(order.get("completionOtp"));
-      if (providedOtp !== storedOtp) return res.status(400).json({ success: false, message: "Code OTP invalide" });
+      const cashPaymentDecision = String(
+        req.body?.cashPaymentDecision ?? req.body?.cashDecision ?? "",
+      )
+        .trim()
+        .toUpperCase();
+      const { paymentMethod: completionPaymentMethod, paymentStatus: completionPaymentStatus } =
+        await getOrderPaymentSnapshot(orderId);
+      const allowCashWithoutOtp =
+        String(completionPaymentMethod || "CASH")
+          .trim()
+          .toUpperCase()
+          .replace(/[\s-]+/g, "_") === "CASH" &&
+        String(completionPaymentStatus || "PENDING").trim().toUpperCase() !== "PAID" &&
+        cashPaymentDecision === "UNPAID";
+      if (!allowCashWithoutOtp && providedOtp !== storedOtp) {
+        return res.status(400).json({ success: false, message: "Code OTP invalide" });
+      }
       updateData.completionOtpValidatedAt = new Date();
       const currentDriverId = order.get('driverId');
       if (currentDriverId) await User.update({ isAvailable: true }, { where: { id: currentDriverId } });
@@ -2318,7 +2444,27 @@ export const createDeliveryRequest = async (req: Request, res: Response) => {
     );
     const countryId = await resolveCountryId("");
     const pricing = await calculateDeliveryPricing({ vehicleType, countryId, distanceKm: extractDistanceKm(distance), durationMinutes: 0, extras: 0, tip: 0 });
-    const newOrder = await Order.create({ publicCode: await generateUniqueOrderPublicCode("CRS"), countryId, userId, pickupLocation, pickupAddress, destinationLocation, destinationAddress, price: pricing.price, distance: String(distance || ""), status: "PENDING", vehicleType, completionOtp: generateCompletionOtp(), deliveryPhone, parcelNature, packageDescription: packageDescription || parcelNature, packageSize: packageSize || null, packageWeight: packageWeight || null });
+    const newOrder = await Order.create({
+      publicCode: await generateUniqueOrderPublicCode("CRS"),
+      countryId,
+      userId,
+      pickupLocation,
+      pickupAddress,
+      destinationLocation,
+      destinationAddress,
+      price: pricing.price,
+      distance: String(distance || ""),
+      status: "PENDING",
+      vehicleType,
+      pickupOtp: generatePickupOtp(),
+      pickupOtpValidatedAt: null,
+      completionOtp: generateCompletionOtp(),
+      deliveryPhone,
+      parcelNature,
+      packageDescription: packageDescription || parcelNature,
+      packageSize: packageSize || null,
+      packageWeight: packageWeight || null,
+    });
     const paymentRow = await Payment.create({ orderId: newOrder.get('id'), userId, amount: pricing.price, status: "PENDING", method: paymentMethod });
     await sendCompletionOtpSmsIfPossible({
       phone: deliveryPhone,

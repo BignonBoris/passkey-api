@@ -18,6 +18,10 @@ function buildPublicUploadUrl(req: Request, folder: string, storedName: string) 
   return `${protocol}://${host}/uploads/${folder}/${storedName}`;
 }
 
+function generatePickupOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 function parseTags(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.map((item) => String(item)).filter(Boolean);
@@ -1304,6 +1308,8 @@ export async function createFoodOrder(req: AuthenticatedRequest, res: Response) 
       revenuePerDelivery: 0,
       platformCommission: deliveryFee,
       serviceFee,
+      pickupOtp: generatePickupOtp(),
+      pickupOtpValidatedAt: null,
       completionOtp: generateCompletionOtp(),
       vehicleType: "food",
       orderType: "food",

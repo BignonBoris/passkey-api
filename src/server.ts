@@ -35,6 +35,8 @@ import "./models/food-home-restaurant.model";
 import "./models/food-home-product.model";
 import "./models/driver-account.model";
 import "./models/driver-funding-transaction.model";
+import "./models/user-wallet-account.model";
+import "./models/user-wallet-transaction.model";
 import AppSettings, { normalizeSettingsContent } from "./models/app-settings.model";
 import FoodHomeCategory from "./models/food-home-category.model";
 import FoodHomePromo from "./models/food-home-promo.model";
@@ -1003,6 +1005,21 @@ async function ensureOrderOtpColumns() {
   const queryInterface = sequelize.getQueryInterface();
   const tableName = "Order";
   const columns = await queryInterface.describeTable(tableName);
+
+  if (!columns.pickupOtp) {
+    await queryInterface.addColumn(tableName, "pickupOtp", {
+      type: DataTypes.STRING(6),
+      allowNull: false,
+      defaultValue: "000000",
+    });
+  }
+
+  if (!columns.pickupOtpValidatedAt) {
+    await queryInterface.addColumn(tableName, "pickupOtpValidatedAt", {
+      type: DataTypes.DATE,
+      allowNull: true,
+    });
+  }
 
   if (!columns.completionOtp) {
     await queryInterface.addColumn(tableName, "completionOtp", {

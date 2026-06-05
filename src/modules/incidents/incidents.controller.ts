@@ -6,6 +6,7 @@ import User from "../../models/user.model";
 import Payment from "../../models/payment.model";
 import { AuthenticatedRequest } from "../../types/auth-request";
 import { notifyAdmins } from "../../services/admin-notification.service";
+import { debitUserWallet } from "../wallet/wallet.service";
 
 const DRIVER_INCIDENT_TYPES = [
   "CUSTOMER_UNREACHABLE",
@@ -296,7 +297,37 @@ export async function reportCashUnpaidIncident(req: AuthenticatedRequest, res: R
         },
       },
     });
+
+    const walletAmount = Number(payment.get("amount") || order.get("price") || 0);
+    const walletReason = `Impayé cash confirmé pour la course ${orderId}`;
+    const walletIdempotencyKey = `${orderId}:cash_unpaid`;
+
     if (existingOpen) {
+      if (walletAmount > 0) {
+        try {
+          await debitUserWallet({
+            userId: String(order.get("userId") || "").trim(),
+            orderId,
+            type: "DEBIT_UNPAID",
+            amount: walletAmount,
+            reason: walletReason,
+            idempotencyKey: walletIdempotencyKey,
+            createdByType: "SYSTEM",
+            sourceStatus: "CASH_UNPAID",
+            metadata: {
+              incidentId: String(existingOpen.get("id") || "").trim(),
+              paymentMethod,
+              paymentStatus,
+              driverId,
+            },
+          });
+        } catch (walletError) {
+          console.warn(
+            `[wallet] impossible de debiter le compte usager pour l'impaye cash de la course ${orderId}:`,
+            walletError,
+          );
+        }
+      }
       return res.status(200).json({
         success: true,
         message: "Un incident d'impaye est deja ouvert pour cette course.",
@@ -322,6 +353,32 @@ export async function reportCashUnpaidIncident(req: AuthenticatedRequest, res: R
       longitude: parseCoordinate(req.body?.longitude),
       evidenceJson: parseEvidence(evidence),
     });
+
+    if (walletAmount > 0) {
+      try {
+        await debitUserWallet({
+          userId: String(order.get("userId") || "").trim(),
+          orderId,
+          type: "DEBIT_UNPAID",
+          amount: walletAmount,
+          reason: walletReason,
+          idempotencyKey: walletIdempotencyKey,
+          createdByType: "SYSTEM",
+          sourceStatus: "CASH_UNPAID",
+          metadata: {
+            incidentId: String(row.get("id") || "").trim(),
+            paymentMethod,
+            paymentStatus,
+            driverId,
+          },
+        });
+      } catch (walletError) {
+        console.warn(
+          `[wallet] impossible de debiter le compte usager pour l'impaye cash de la course ${orderId}:`,
+          walletError,
+        );
+      }
+    }
 
     await notifyAdmins({
       actorId: driverId,

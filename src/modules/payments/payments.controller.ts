@@ -33,6 +33,10 @@ function normalizeRole(role: unknown) {
   return String(role || "").trim().toLowerCase();
 }
 
+function generatePickupOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 function canAccessOrderPayment(params: {
   requesterId?: string | null;
   requesterRole?: string | null;
@@ -700,6 +704,8 @@ export async function createTestPaymentCheckout(req: AuthenticatedRequest, res: 
       revenuePerDelivery: 0,
       platformCommission: 0,
       serviceFee: 0,
+      pickupOtp: generatePickupOtp(),
+      pickupOtpValidatedAt: null,
       completionOtp: generateCompletionOtp(),
       vehicleType: "test-payment",
       status: "PENDING",

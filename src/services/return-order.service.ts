@@ -33,6 +33,10 @@ function generateCompletionOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+function generatePickupOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 function normalizePaymentMethod(value: unknown): "CASH" | "MOBILE_MONEY" | "CARD" {
   const normalized = String(value || "")
     .trim()
@@ -164,6 +168,7 @@ export async function getCancelAfterPickupQuote(orderId: string) {
 export async function confirmCancelAfterPickup(params: {
   orderId: string;
   cancellationReason?: string;
+  paymentMethod?: string;
 }) {
   return sequelize.transaction(async (transaction) => {
     const order = await Order.findByPk(params.orderId, {
@@ -217,6 +222,9 @@ export async function confirmCancelAfterPickup(params: {
     const driverId = String(order.get("driverId") || "").trim();
     const driverVehicleId = String(order.get("driverVehicleId") || "").trim() || null;
     const reason = String(params.cancellationReason || "").trim();
+    const selectedPaymentMethod = normalizePaymentMethod(
+      params.paymentMethod || quote.paymentMethod,
+    );
 
     const returnContext = {
       kind: "RETURN_AFTER_PICKUP",
@@ -240,6 +248,8 @@ export async function confirmCancelAfterPickup(params: {
         driverId,
         driverVehicleId,
         parentOrderId: String(order.get("id") || ""),
+        pickupOtp: generatePickupOtp(),
+        pickupOtpValidatedAt: null,
         completionOtp: generateCompletionOtp(),
         searchStartedAt: new Date(),
         pickupLocation: quote.returnPickupLocation,
@@ -278,7 +288,7 @@ export async function confirmCancelAfterPickup(params: {
         amount: quote.totalAmountDue,
         currency: "XOF",
         status: "PENDING",
-        method: quote.paymentMethod,
+        method: selectedPaymentMethod,
       },
       { transaction },
     );
@@ -322,7 +332,10 @@ export async function confirmCancelAfterPickup(params: {
     return {
       originalOrder: order,
       returnOrder,
-      quote,
+      quote: {
+        ...quote,
+        paymentMethod: selectedPaymentMethod,
+      },
       payment,
       driver: quote.driver,
       vehicle,
